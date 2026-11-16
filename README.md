@@ -2,7 +2,7 @@
 
 > A minimal, offline-first habit tracker and focus companion.
 
-**Live app:** [https://misalignedink.github.io/bediscipline](https://misalignedink.github.io/bediscipline)
+**Live site:** [https://misalignedink.github.io/bediscipline](https://misalignedink.github.io/bediscipline)
 
 ---
 
