@@ -5,16 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Be Discipline</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon.svg">
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
   <meta name="theme-color" content="#2f3bff">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Be Discipline">
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script>tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'] }, colors: { accent: '#2f3bff' } } } }</script>
@@ -831,6 +826,7 @@
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="user" class="w-3.5 h-3.5"></i>Built by</dt><dd><a class="author" href="https://misalignedink.github.io" target="_blank" rel="noopener noreferrer">Sayak Majumder<i data-lucide="arrow-up-right" class="w-4 h-4"></i><span class="hint">Visit Sayak's website</span></a></dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i>Made with</dt><dd class="font-semibold">Vibe coding</dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>Your data</dt><dd class="font-semibold">Stays on device</dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>Android App</dt><dd><a class="author" href="release/bediscipline.apk" download>Download APK<i data-lucide="download" class="w-4 h-4"></i><span class="hint">Download Android APK</span></a></dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="wifi-off" class="w-3.5 h-3.5"></i>Works offline</dt><dd class="font-semibold">Yes</dd></div>
       </dl>
       <p class="text-xs opacity-40 mt-4">&copy; ${new Date().getFullYear()} Sayak Majumder. All rights reserved.</p>
@@ -1133,7 +1129,9 @@
     // Midnight rollover: re-render when the local date changes.
     setInterval(() => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } }, 30000);
     document.addEventListener('visibilitychange', () => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } });
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => { });
+    }
   </script>
 </body>
 
