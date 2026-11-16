@@ -238,6 +238,82 @@
       background: #17713b
     }
 
+    /* ── popup slide ── */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(48px)
+      }
+
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    @keyframes slideOut {
+      to {
+        opacity: 0;
+        transform: translateX(-48px)
+      }
+    }
+
+    .slide-in {
+      animation: slideIn .38s cubic-bezier(.2, .8, .2, 1) both
+    }
+
+    .slide-out {
+      animation: slideOut .22s ease-in both
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+
+      .slide-in,
+      .slide-out {
+        animation: none !important
+      }
+    }
+
+    /* ── time fields ── */
+    .time-field {
+      cursor: pointer;
+      background: rgba(47, 59, 255, .06) !important;
+      border-color: rgba(47, 59, 255, .28) !important;
+      transition: background .15s, border-color .15s, box-shadow .15s
+    }
+
+    .time-field:hover {
+      background: rgba(47, 59, 255, .13) !important;
+      border-color: #2f3bff !important
+    }
+
+    .time-field:focus {
+      box-shadow: 0 0 0 3px rgba(47, 59, 255, .18)
+    }
+
+    .dark .time-field {
+      background: rgba(139, 147, 255, .1) !important;
+      border-color: rgba(139, 147, 255, .3) !important
+    }
+
+    .dark .time-field:hover {
+      background: rgba(139, 147, 255, .2) !important;
+      border-color: #8b93ff !important
+    }
+
+    .time-field::-webkit-calendar-picker-indicator {
+      cursor: pointer;
+      opacity: .65;
+      padding: 4px;
+      border-radius: 6px;
+      transition: opacity .15s, background-color .15s
+    }
+
+    .time-field:hover::-webkit-calendar-picker-indicator {
+      opacity: 1;
+      background-color: rgba(47, 59, 255, .15)
+    }
+
     /* ── tooltip ── */
     #tip {
       position: fixed;
@@ -536,6 +612,8 @@
     const logo = (c, w = 2) => `<svg class="${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const pad = n => String(n).padStart(2, '0');
+    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const tmOk = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : '', FMODES = ['timer', 'stopwatch', 'pomodoro'];
     const key = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const fromKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d) };
     const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x };
@@ -566,7 +644,7 @@
     function save() { try { localStorage.setItem(KEY, JSON.stringify(S)) } catch (e) { toast('Could not save: browser storage is full or blocked.', 'err') } }
 
     /* ---------- logic ---------- */
-    const sched = (h, d) => key(d) >= h.created && (!h.days.length || h.days.includes(d.getDay()));
+    const sched = (h, d) => key(d) >= h.created && (!h.until || key(d) <= h.until) && (!h.days.length || h.days.includes(d.getDay()));
     const done = (h, d) => (S.logs[key(d)] || []).includes(h.id);
     function streak(h, endK = todayK) {
       let d = fromKey(endK < todayK ? endK : todayK), n = 0;
@@ -586,7 +664,7 @@
     function toggleTask(id) { const t = S.tasks.find(x => x.id === id); if (!t) return; if (t.date > todayK) return toast('You can tick this off once the day arrives.', 'err'); t.done = !t.done; save(); render() }
     function delHabit(id) { const h = S.habits.find(x => x.id === id); if (h) confirmBox('Delete habit?', `“${h.name}” and all of its history will be permanently removed.`, () => { removeHabit(id); toast('Habit deleted.') }) }
     function delTask(id) { const t = S.tasks.find(x => x.id === id); if (t) confirmBox('Delete task?', `“${t.name}” will be permanently removed.`, () => { S.tasks = S.tasks.filter(x => x.id !== id); save(); render(); toast('Task deleted.') }) }
-    function toast(msg, type = 'ok') { const t = $('#toast'); t.innerHTML = `<div class="px-4 py-2.5 text-sm font-medium shadow-lg ${type === 'err' ? 'bg-red-600 text-white' : 'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950'}">${esc(msg)}</div>`; clearTimeout(toast.t); toast.t = setTimeout(() => t.innerHTML = '', 3500) }
+    function toast(msg, type = 'ok', ms = 3500) { const t = $('#toast'); t.innerHTML = `<div class="px-4 py-2.5 text-sm font-medium shadow-lg ${type === 'err' ? 'bg-red-600 text-white' : 'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950'}">${esc(msg)}</div>`; clearTimeout(toast.t); toast.t = setTimeout(() => t.innerHTML = '', ms) }
     function applyTheme() { document.documentElement.classList.toggle('dark', S.prefs.theme === 'dark') }
     function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000) }
 
@@ -594,17 +672,18 @@
     const btn = 'px-4 py-2 text-sm font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors';
     const btnP = 'px-4 py-2 text-sm font-semibold rounded-xl bg-accent text-white hover:opacity-90 transition-opacity';
     function modal(html, raw = false) {
-      $('#modal').innerHTML = `<div class="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onclick="if(event.target===this)closeModal()"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl ${raw ? 'max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden' : 'p-6 max-h-[90vh] overflow-auto'}">${html}</div></div>`;
+      formSnap = formSnapFn = formSaveFn = null;
+      $('#modal').innerHTML = `<div class="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onclick="if(event.target===this)dismissModal()"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl ${raw ? 'max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden' : 'p-6 max-h-[90vh] overflow-auto'}">${html}</div></div>`;
       lucide.createIcons();
     }
-    function closeModal() { $('#modal').innerHTML = '' }
+    function closeModal() { formSnap = formSnapFn = formSaveFn = null; $('#modal').innerHTML = '' }
     let appPopupOpen = false;
     function closePop() {
       if (appPopupOpen) { appPopupOpen = false; try { localStorage.setItem('be-discipline-apk-prompt-v1', '1') } catch (e) { } }
       popSticky = false; $('#modal2').innerHTML = ''
     }
     function checkAppPopup() {
-      try { if (localStorage.getItem('be-discipline-apk-prompt-v1')) return } catch (e) { }
+      try { if (localStorage.getItem('be-discipline-apk-prompt-v1')) return showWelcome(false) } catch (e) { }
       appPopupOpen = true;
       pop(`<div class="flex items-start justify-between gap-3 mb-3">
         <div class="flex items-center gap-3">
@@ -614,13 +693,14 @@
             <p class="text-xs opacity-60 mt-0.5">Be Discipline for Android</p>
           </div>
         </div>
-        <button type="button" onclick="closePop()" aria-label="Close popup" class="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-950 dark:hover:text-stone-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <button type="button" onclick="appNext()" aria-label="Close popup" class="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-950 dark:hover:text-stone-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
       <p class="text-sm leading-relaxed mb-5">Now you can download <strong>Be Discipline</strong> as an Android app!</p>
       <div class="flex flex-col gap-2">
-        <a href="release/bediscipline.apk" download onclick="closePop()" class="${btnP} w-full flex items-center justify-center gap-2 text-center no-underline"><i data-lucide="download" class="w-4 h-4"></i>Download Android App (.apk)</a>
-        <button type="button" class="${btn} w-full text-center" onclick="closePop()">Maybe later</button>
+        <a href="release/bediscipline.apk" download onclick="appNext()" class="${btnP} w-full flex items-center justify-center gap-2 text-center no-underline"><i data-lucide="download" class="w-4 h-4"></i>Download Android App (.apk)</a>
+        <button type="button" class="${btn} w-full flex items-center justify-center gap-1.5" onclick="appNext()">Next<i data-lucide="arrow-right" class="w-4 h-4"></i></button>
       </div>
+      ${stepDots(1)}
       <p class="text-xs opacity-50 mt-4 pt-3 border-t border-neutral-200 dark:border-neutral-800 text-center">Note: You can also download it later from the Settings.</p>`)
     }
     /* ---------- in-app popups: confirm + calendar ---------- */
@@ -630,9 +710,9 @@
       $('#modal2').innerHTML = `<div class="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onclick="${sticky ? '' : 'if(event.target===this)closePop()'}"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-sm p-5 sm:p-6 rounded-t-2xl sm:rounded-2xl max-h-[90dvh] overflow-auto shadow-2xl" style="padding-bottom:max(1.25rem,env(safe-area-inset-bottom))">${html}</div></div>`;
       lucide.createIcons();
     }
-    function confirmBox(title, body, action, label = 'Delete') {
+    function confirmBox(title, body, action, label = 'Delete', icon = 'trash-2') {
       popCb = action;
-      pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shrink-0"><i data-lucide="trash-2" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">${esc(title)}</h2></div>
+      pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shrink-0"><i data-lucide="${icon}" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">${esc(title)}</h2></div>
   <p class="text-sm mb-6">${esc(body)}</p>
   <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closePop()">Cancel</button><button class="px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 text-white hover:bg-red-700" onclick="runPop()">${esc(label)}</button></div>`)
     }
@@ -657,27 +737,28 @@
   <div class="grid grid-cols-7 gap-1">${cells}</div>
   <div class="flex items-center justify-between mt-5"><button class="text-sm font-semibold underline" onclick="calPick('${todayK}')">Today</button><button class="${btn}" onclick="closePop()">Cancel</button></div>`)
     }
-    function setFormDate(k) { const b = $('#hdt'); b.dataset.k = k; $('#hdtl').textContent = shortDate(k) }
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#modal2').innerHTML) { if (!popSticky) closePop() } else closeModal() } });
+    function setFormDate(k) { const b = $('#hdt'); b.dataset.k = k; $('#hdtl').textContent = shortDate(k); durHint() }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#modal2').innerHTML) { if (!popSticky) closePop() } else dismissModal() } });
 
-    function habitForm(type = 'habit') {
+    function habitForm(type = 'habit', id = null) {
+      editId = id; endTouched = false;
       const inp = 'w-full mb-3.5 px-3.5 py-2.5 bg-stone-100/70 dark:bg-neutral-800/70 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:border-accent dark:focus:border-accent outline-none transition-colors text-sm';
       modal(`
   <div class="flex items-center justify-between px-5 pt-4 pb-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
     <h2 id="ft" class="text-lg sm:text-xl font-bold tracking-tight">New habit</h2>
-    <button type="button" onclick="closeModal()" aria-label="Close dialog" class="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-950 dark:hover:text-stone-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors">
+    <button type="button" onclick="dismissModal()" aria-label="Close dialog" class="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-950 dark:hover:text-stone-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors">
       <i data-lucide="x" class="w-5 h-5"></i>
     </button>
   </div>
 
-  <div class="overflow-y-auto px-5 py-4 flex-1 overscroll-contain">
+  <div class="overflow-y-auto px-5 py-4 flex-1 overscroll-contain" onkeydown="formEnter(event)">
     <div class="flex p-1 mb-2.5 rounded-xl bg-neutral-200/70 dark:bg-neutral-800 border border-neutral-300/40 dark:border-neutral-700/50" role="group" aria-label="What are you adding?">
       ${[['habit', 'Habit'], ['task', 'Task']].map(([t, l]) => `<button type="button" data-t="${t}" onclick="setType('${t}')" class="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all">${l}</button>`).join('')}
     </div>
     <p id="fhelp" class="text-xs opacity-60 mb-3.5"></p>
 
     <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hn">Name</label>
-    <input id="hn" maxlength="60" class="${inp}" onkeydown="if(event.key==='Enter'){event.preventDefault();addItem()}">
+    <input id="hn" maxlength="60" class="${inp}">
 
     <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hc">Category</label>
     <select id="hc" class="${inp} bg-stone-100/70 dark:bg-neutral-800/70">${catOptions()}</select>
@@ -688,12 +769,37 @@
       <i data-lucide="calendar" class="w-4 h-4 opacity-60"></i>
     </button>
 
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hts">Start time <span class="normal-case font-medium opacity-70">(optional)</span></label><input id="hts" type="time" oninput="setFocusUI()" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div>
+      <div><label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hte">End time <span class="normal-case font-medium opacity-70">(optional)</span></label><input id="hte" type="time" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div>
+    </div>
+    <label class="flex items-start gap-3 mb-3.5 cursor-pointer">
+      <input id="hfc" type="checkbox" onchange="fToggle()" class="w-4 h-4 mt-0.5 accent-[#2f3bff]">
+      <span><span class="block text-sm font-semibold">Plan as a focus session</span><span class="block text-xs opacity-60 mt-0.5">Optional. Adds it to the Focus tab and reminds you 30, 15 and 10 minutes before the start time.</span></span>
+    </label>
+    <div id="hfopts" class="hidden">
+      <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hfm">Focus method</label>
+      <select id="hfm" class="${inp}"><option value="timer">Timer</option><option value="stopwatch">Stopwatch</option><option value="pomodoro" selected>Pomodoro</option></select>
+      <p id="hfn" class="text-[11px] opacity-60 -mt-2 mb-3.5"></p>
+    </div>
+
     <div id="rep">
-      <p class="text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5">Repeat</p>
-      <div class="grid grid-cols-7 gap-1.5 mb-1.5" id="hd">
-        ${DAYS.map((d, i) => `<button type="button" data-d="${i}" aria-pressed="false" class="aspect-square text-sm font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 aria-pressed:!bg-accent aria-pressed:!text-white aria-pressed:!border-accent flex items-center justify-center transition-colors" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true')">${d}</button>`).join('')}
+      <div class="flex items-center justify-between mb-1.5"><p class="text-xs font-semibold uppercase tracking-wider opacity-60">Repeat</p><button type="button" id="hall" onclick="toggleAllDays()" class="text-xs font-semibold text-accent dark:text-blue-400 hover:underline">Select all</button></div>
+      <div class="grid grid-cols-7 gap-1.5 mb-3.5" id="hd">
+        ${DAYS.map((d, i) => `<button type="button" data-d="${i}" aria-pressed="false" class="aspect-square text-sm font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 aria-pressed:!bg-accent aria-pressed:!text-white aria-pressed:!border-accent flex items-center justify-center transition-colors" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true');syncAll()">${d}</button>`).join('')}
       </div>
-      <p class="text-[11px] opacity-60 mb-3.5">Leave all unselected for every day.</p>
+      <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hdur">Repeat for (days)</label>
+      <input id="hdur" type="number" min="1" max="3650" inputmode="numeric" placeholder="Forever" oninput="endTouched=true;durHint()" class="${inp} !mb-1.5">
+      <p id="hdurh" class="text-[11px] opacity-60 mb-3.5">Leave empty to repeat forever.</p>
+      <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hend">Ends on</label>
+      <div class="flex gap-2 mb-3.5">
+        <button type="button" id="hend" data-k="" onclick="openCal(this.dataset.k||$('#hdt').dataset.k,pickEnd)" class="${inp} !mb-0 flex-1 flex items-center justify-between text-left">
+          <span id="hendl">Never</span>
+          <i data-lucide="calendar" class="w-4 h-4 opacity-60"></i>
+        </button>
+        <button type="button" id="hendx" onclick="clearEnd()" class="${btn} shrink-0 hidden">Clear</button>
+      </div>
+      <div id="hst"></div>
     </div>
 
     <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hno">Notes (optional)</label>
@@ -701,10 +807,25 @@
   </div>
 
   <div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 dark:border-neutral-800 bg-stone-50/95 dark:bg-neutral-900/95 shrink-0" style="padding-bottom:max(0.75rem,env(safe-area-inset-bottom))">
-    <button type="button" class="${btn}" onclick="closeModal()">Cancel</button>
+    <button type="button" class="${btn}" onclick="dismissModal()">Cancel</button>
     <button type="button" id="fb" class="${btnP}" onclick="addItem()">Add habit</button>
   </div>`, true);
       setType(type);
+      if (id) {
+        const it = (type === 'task' ? S.tasks : S.habits).find(x => x.id === id); if (!it) return closeModal();
+        $('#hn').value = it.name; $('#hno').value = it.notes || ''; $('#hts').value = it.tStart || ''; $('#hte').value = it.tEnd || ''; $('#hfc').checked = !!it.focus; $('#hfm').value = it.fMode || 'pomodoro'; setFormDate(type === 'task' ? it.date : it.created);
+        if (!S.cats.some(c => c.name === it.cat)) $('#hc').insertAdjacentHTML('afterbegin', '<option value="">Uncategorized</option>');
+        $('#hc').value = it.cat || '';
+        document.querySelector('[data-t]').parentElement.style.display = 'none';
+        if (type === 'habit') {
+          (it.days.length ? it.days : [0, 1, 2, 3, 4, 5, 6]).forEach(i => document.querySelector(`#hd [data-d="${i}"]`).setAttribute('aria-pressed', 'true')); syncAll();
+          if (it.until && spanOf(it) >= 1) $('#hdur').value = spanOf(it);
+          durHint(); if (it.until && spanOf(it) < 1) setEnd(it.until);
+          const ended = it.until && it.until <= todayK, b = 'shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200/50 dark:hover:bg-neutral-800';
+          $('#hst').innerHTML = `<div class="flex items-center justify-between gap-3 mb-3.5 px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-sm"><span class="opacity-70">${esc(habitStatus(it))}</span><button type="button" class="${b}" onclick="formToggleHabit('${it.id}',${!!ended})">${ended ? 'Resume habit' : 'Stop habit'}</button></div>`;
+        }
+      }
+      setFocusUI(); formSnapFn = habitFormState; formSaveFn = addItem; formSnap = formSnapFn();
       if (window.innerWidth >= 640) $('#hn').focus();
     }
     function setType(t) {
@@ -714,24 +835,199 @@
         b.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all ' + (on ? 'bg-white dark:bg-neutral-950 text-neutral-950 dark:text-stone-100 shadow-sm' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-stone-200');
         b.setAttribute('aria-pressed', on);
       });
-      $('#ft').textContent = task ? 'New task' : 'New habit';
-      $('#fb').textContent = task ? 'Add task' : 'Add habit';
+      $('#ft').textContent = (editId ? 'Edit ' : 'New ') + (task ? 'task' : 'habit');
+      $('#fb').textContent = editId ? 'Save changes' : task ? 'Add task' : 'Add habit';
       $('#datel').textContent = task ? 'Date' : 'Starts on';
       $('#rep').style.display = task ? 'none' : '';
       $('#fhelp').textContent = task ? 'A task happens once, on the date you pick.' : 'A habit repeats and builds a streak from its start date.';
       $('#hn').placeholder = task ? 'e.g. Submit the assignment' : 'e.g. Write for 30 minutes';
     }
     function addItem() {
-      const name = $('#hn').value.trim(); if (!name) { $('#hn').focus(); return toast('Enter a name.', 'err') }
+      const name = cap($('#hn').value.trim()); if (!name) { $('#hn').focus(); return toast('Enter a name.', 'err') }
       const date = /^\d{4}-\d{2}-\d{2}$/.test($('#hdt').dataset.k) ? $('#hdt').dataset.k : viewK, cat = $('#hc').value, notes = $('#hno').value.trim();
-      if (formType === 'task') S.tasks.push({ id: uid(), name, cat, date, notes, done: false });
-      else {
-        const days = [...document.querySelectorAll('#hd [aria-pressed=true]')].map(b => +b.dataset.d);
-        S.habits.push({ id: uid(), name, cat, days: days.length === 7 ? [] : days, notes, created: date })
+      const ts = $('#hts').value, te = $('#hte').value, fc = $('#hfc').checked, tf = { tStart: ts, tEnd: te, focus: fc, fMode: $('#hfm').value };
+      if (te && !ts) { $('#hts').focus(); return toast('Add a start time before the end time.', 'err') }
+      if (ts && te && te <= ts) { $('#hte').focus(); return toast('End time must be after the start time.', 'err') }
+      if (fc && !ts) { $('#hts').focus(); return toast('Set a start time to plan a focus session.', 'err') }
+      let until = '';
+      if (formType === 'habit') {
+        const dv = $('#hdur').value.trim(), n = Math.round(+dv);
+        if (dv !== '' && !(n >= 1 && n <= 3650)) { $('#hdur').focus(); return toast('Repeat days must be 1 to 3650, or leave it empty.', 'err') }
+        if (dv !== '') until = key(addDays(fromKey(date), n - 1));
+        else if (editId && !endTouched) { const o = S.habits.find(x => x.id === editId); if (o && o.until && o.until < o.created) until = o.until }
       }
-      viewK = date; view = 'today'; save(); closeModal(); render(); toast(formType === 'task' ? 'Task added.' : 'Habit added.')
+      const picked = formType === 'habit' ? [...document.querySelectorAll('#hd [aria-pressed=true]')].map(b => +b.dataset.d) : [], days = picked.length === 7 ? [] : picked, ed = editId;
+      if (ed) {
+        const it = (formType === 'task' ? S.tasks : S.habits).find(x => x.id === ed); if (!it) return closeModal();
+        Object.assign(it, tf, formType === 'task' ? { name, cat, date, notes } : { name, cat, notes, days, created: date, until })
+      } else if (formType === 'task') S.tasks.push({ id: uid(), name, cat, date, notes, done: false, ...tf });
+      else S.habits.push({ id: uid(), name, cat, days, notes, created: date, until, ...tf });
+      editId = null; if (!ed) view = 'today'; if (!ed || formType === 'task') viewK = date;
+      save(); closeModal(); render(); toast(ed ? 'Changes saved.' : formType === 'task' ? 'Task added.' : 'Habit added.')
     }
     function removeHabit(id) { S.habits = S.habits.filter(h => h.id !== id); for (const k in S.logs) { S.logs[k] = S.logs[k].filter(x => x !== id); if (!S.logs[k].length) delete S.logs[k] } save(); render() }
+
+    /* ---------- edit / stop habits, tasks, sessions ---------- */
+    let editId = null, editSid = null, formSnap = null, formSnapFn = null, formSaveFn = null, endTouched = false;
+    const habitFormState = () => JSON.stringify([formType, ...['hn', 'hc', 'hno', 'hdur', 'hts', 'hte', 'hfm'].map(i => { const e = $('#' + i); return e && e.value }), $('#hdt') && $('#hdt').dataset.k, $('#hend') && $('#hend').dataset.k, [...document.querySelectorAll('#hd [aria-pressed=true]')].map(b => b.dataset.d).join(), $('#hfc') && $('#hfc').checked]);
+    const dirty = () => formSnapFn && formSnap !== null && formSnapFn() !== formSnap;
+    function dismissModal() { if (dirty()) unsavedPrompt(); else closeModal() }
+    function unsavedPrompt() {
+      pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-accent text-white rounded-xl flex items-center justify-center shrink-0"><i data-lucide="save" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">Save changes?</h2></div>
+  <p class="text-sm mb-6">You have unsaved changes. Do you want to save them or discard them?</p>
+  <div class="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end"><button class="${btn}" onclick="closePop()">Keep editing</button><button class="${btn} !text-red-600" onclick="closePop();closeModal()">Discard</button><button class="${btnP}" onclick="closePop();if(formSaveFn)formSaveFn()">Save</button></div>`)
+    }
+    function formEnter(e) {
+      if (e.key !== 'Enter' || !['INPUT', 'SELECT'].includes(e.target.tagName)) return;
+      e.preventDefault();
+      const order = ['hn', 'hc', 'hdt', 'hts', 'hte', 'hfm', 'hdur', 'hend', 'hno'].filter(i => { const el = $('#' + i); return el && el.getClientRects().length }), i = order.indexOf(e.target.id);
+      if (i >= 0 && i < order.length - 1) $('#' + order[i + 1]).focus()
+    }
+    function syncAll() { const all = [...document.querySelectorAll('#hd [data-d]')].every(x => x.getAttribute('aria-pressed') === 'true'), h = $('#hall'); if (h) h.textContent = all ? 'Clear all' : 'Select all' }
+    function toggleAllDays() { const b = [...document.querySelectorAll('#hd [data-d]')], all = b.every(x => x.getAttribute('aria-pressed') === 'true'); b.forEach(x => x.setAttribute('aria-pressed', String(!all))); syncAll() }
+    /* ---------- planned focus sessions + reminders ---------- */
+    let activePlan = null;
+    const REM = [30, 15, 10];
+    const fmtT = v => new Date(2000, 0, 1, +v.slice(0, 2), +v.slice(3)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const tmx = x => x.tStart ? ' · ' + fmtT(x.tStart) + (x.tEnd ? ' – ' + fmtT(x.tEnd) : '') + (x.focus ? ' · ' + MODES[x.fMode] + ' focus' : '') : '';
+    const startMs = (k, t) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d, +t.slice(0, 2), +t.slice(3)).getTime() };
+    function setFocusUI() {
+      const c = $('#hfc'); if (!c) return; $('#hfopts').classList.toggle('hidden', !c.checked);
+      const e = $('#hfn'), N = window.Notification;
+      e.textContent = !$('#hts').value ? 'Set a start time above so we know when to remind you.' : !N ? 'This browser can’t show notifications. You’ll still see an in-app reminder while Be Discipline is open.' : N.permission === 'granted' ? 'Notifications are on. Keep Be Discipline open (a background tab is fine) to receive them.' : N.permission === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings. You’ll still see an in-app reminder while the app is open.' : 'Allow notifications when your browser asks.'
+    }
+    function fToggle() {
+      const N = window.Notification;
+      if ($('#hfc').checked && !$('#hts').value) $('#hts').focus();
+      if ($('#hfc').checked && N && N.permission === 'default') { try { N.requestPermission().then(setFocusUI) } catch (e) { } }
+      setFocusUI()
+    }
+    function plannedOn(k) {
+      const d = fromKey(k), out = [];
+      S.habits.forEach(h => { if (h.focus && h.tStart && sched(h, d)) out.push({ kind: 'habit', x: h, ok: done(h, d) }) });
+      S.tasks.forEach(t => { if (t.focus && t.tStart && t.date === k) out.push({ kind: 'task', x: t, ok: t.done }) });
+      return out.sort((a, b) => a.x.tStart < b.x.tStart ? -1 : a.x.tStart > b.x.tStart ? 1 : 0)
+    }
+    function openPlanned(kind, id) {
+      const x = (kind === 'task' ? S.tasks : S.habits).find(y => y.id === id); if (!x) return;
+      activePlan = { name: x.name, kind, id, k: todayK }; view = 'study'; sub = x.fMode; closeModal(); closePop(); render(); toast(`${MODES[x.fMode]} ready. Press Start when you’re ready.`)
+    }
+    function plannedCard() {
+      const items = plannedOn(todayK); if (!items.length) return '';
+      return `<div class="mt-4 card card-border"><p class="text-xs font-bold uppercase tracking-widest opacity-50 mb-1">Planned today</p><ul class="divide-y divide-neutral-200 dark:divide-neutral-800">${items.map(({ kind, x, ok }) => `<li class="flex items-center gap-3 py-2.5"><div class="min-w-0 flex-1"><p class="text-sm font-semibold truncate ${ok ? 'line-through opacity-40' : ''}">${esc(x.name)}</p><p class="text-xs opacity-50 truncate">${fmtT(x.tStart)}${x.tEnd ? ' – ' + fmtT(x.tEnd) : ''} · ${MODES[x.fMode]}</p></div>${ok ? '' : `<button class="${btnP} !px-3 !py-1.5 !text-xs" onclick="openPlanned('${kind}','${x.id}')">Start</button>`}</li>`).join('')}</ul></div>`
+    }
+    function notify(title, body, kind, id) {
+      toast(title + '. ' + body, 'ok', 9000);
+      try { if (window.Notification && Notification.permission === 'granted') { const n = new Notification(title, { body, tag: id, icon: 'assets/icon.svg' }); n.onclick = () => { window.focus(); openPlanned(kind, id); n.close() } } } catch (e) { }
+    }
+    function checkReminders() {
+      if (!S) return; const now = Date.now(), fired = (S.fired ??= {}), old = key(addDays(new Date(), -1)); let ch = false;
+      for (const k in fired) if (k.split('|')[1] < old) { delete fired[k]; ch = true }
+      [key(new Date()), key(addDays(new Date(), 1))].forEach(dk => plannedOn(dk).forEach(({ kind, x, ok }) => {
+        const st = startMs(dk, x.tStart); if (ok || now >= st) return;
+        const due = REM.filter(m => now >= st - m * 6e4 && !fired[`${x.id}|${dk}|${m}`]); if (!due.length) return;
+        due.forEach(m => { fired[`${x.id}|${dk}|${m}`] = 1 }); ch = true;
+        notify(`Focus session in ${Math.max(1, Math.ceil((st - now) / 6e4))} min`, `${x.name} · ${fmtT(x.tStart)} · ${MODES[x.fMode]}`, kind, x.id)
+      }));
+      if (ch) save()
+    }
+    document.addEventListener('visibilitychange', checkReminders);
+    const stepDots = n => `<div class="flex justify-center gap-1.5 mt-4" role="img" aria-label="Step ${n} of 2">${[1, 2].map(i => `<span class="h-1.5 rounded-full transition-all ${i === n ? 'w-5 bg-accent' : 'w-1.5 bg-neutral-300 dark:bg-neutral-700'}"></span>`).join('')}</div>`;
+    function appNext() {
+      appPopupOpen = false; try { localStorage.setItem('be-discipline-apk-prompt-v1', '1') } catch (e) { }
+      if (S.prefs.tipsSeen) return closePop();
+      const d = document.querySelector('#modal2 [role=dialog]'); if (d) d.classList.add('slide-out');
+      setTimeout(() => showWelcome(true), d ? 220 : 0)
+    }
+    function showWelcome(steps) {
+      if (S.prefs.tipsSeen) return;
+      const li = (ic, t, d) => `<li class="flex items-start gap-3"><span class="w-9 h-9 rounded-xl bg-accent/10 text-accent dark:text-blue-400 flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-4 h-4"></i></span><span class="text-sm leading-snug"><b class="block">${t}</b><span class="opacity-70">${d}</span></span></li>`;
+      pop(`<div class="flex items-center gap-3 mb-5"><span class="w-10 h-10 bg-[#15803d] text-white rounded-xl flex items-center justify-center shrink-0">${logo('w-5 h-5', 2.5)}</span><div><h2 class="text-lg font-bold leading-tight">Welcome to Be Discipline</h2><p class="text-xs opacity-60 mt-0.5">Three things to know</p></div></div>
+  <ul class="space-y-4 mb-6">${li('check-square', 'Tick it off', 'Tap the box next to a habit or task when you finish it. Habits build a streak.')}${li('plus', 'Add your own', 'Tap Add. A habit repeats on the days you choose. A task happens once.')}${li('target', 'Stay focused', 'The Focus tab has a timer, stopwatch and Pomodoro. Tick “Plan as a focus session” when adding something to get reminders.')}</ul>
+  <button type="button" class="${btnP} w-full" onclick="finishWelcome()">Got it</button>${steps ? stepDots(2) : ''}`, true);
+      const d = document.querySelector('#modal2 [role=dialog]'); if (d && steps) d.classList.add('slide-in')
+    }
+    function finishWelcome() { S.prefs.tipsSeen = true; save(); closePop() }
+    function notifRow() {
+      const N = window.Notification, p = N ? N.permission : 'none', b = 'px-4 py-2 text-xs font-semibold border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800';
+      const [d, a] = p === 'none' ? ['Your browser doesn’t support notifications. You’ll still see in-app reminders while the app is open.', ''] : p === 'granted' ? ['On. You’ll be reminded 30, 15 and 10 minutes before planned focus sessions.', `<button class="${b}" onclick="testNotif()">Send test</button>`] : p === 'denied' ? ['Blocked. Allow notifications for this site in your browser settings to turn them on.', ''] : ['Get a reminder before your planned focus sessions start.', `<button class="px-4 py-2 text-xs font-semibold rounded-lg bg-accent text-white hover:opacity-90" onclick="askNotif()">Turn on</button>`];
+      return `<div class="mb-8 card card-border flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="font-semibold text-sm">Reminders</p><p class="text-xs opacity-50 mt-0.5">${d}</p></div>${a ? `<div class="shrink-0">${a}</div>` : ''}</div>`
+    }
+    function askNotif() { try { Notification.requestPermission().then(() => render()) } catch (e) { } }
+    function testNotif() { notify('Test reminder', 'Notifications are working. You’ll get one like this before planned sessions.') }
+    function formToggleHabit(id, resume) {
+      const go = () => resume ? resumeHabit(id) : stopHabit(id);
+      if (dirty()) confirmBox(resume ? 'Resume habit?' : 'Stop habit?', 'Unsaved changes in this form will be discarded.', go, resume ? 'Resume' : 'Stop habit', resume ? 'play' : 'pause');
+      else go()
+    }
+    const spanOf = h => h.until ? Math.round((fromKey(h.until) - fromKey(h.created)) / 864e5) + 1 : 0;
+    function habitStatus(h) {
+      if (h.until && h.until < todayK) return 'Ended ' + shortDate(h.until);
+      if (h.created > todayK) return 'Starts ' + shortDate(h.created);
+      return h.until === todayK ? 'Ends today' : h.until ? 'Ends ' + shortDate(h.until) : 'Repeats forever'
+    }
+    function durHint() {
+      const e = $('#hdurh'); if (!e) return; const v = $('#hdur').value.trim(), n = Math.round(+v);
+      e.textContent = v === '' ? 'Leave empty to repeat forever.' : n >= 1 && n <= 3650 ? `Runs for ${n} day${n === 1 ? '' : 's'}, until ${shortDate(key(addDays(fromKey($('#hdt').dataset.k), n - 1)))}.` : 'Enter a number from 1 to 3650.';
+      if (v === '') setEnd(''); else if (n >= 1 && n <= 3650) setEnd(key(addDays(fromKey($('#hdt').dataset.k), n - 1)))
+    }
+    function setEnd(k) { const b = $('#hend'); if (!b) return; b.dataset.k = k; $('#hendl').textContent = k ? shortDate(k) : 'Never'; $('#hendx').classList.toggle('hidden', !k) }
+    function pickEnd(k) {
+      endTouched = true;
+      const st = $('#hdt').dataset.k; if (k < st) return toast('End date can’t be before the start date.', 'err');
+      $('#hdur').value = Math.round((fromKey(k) - fromKey(st)) / 864e5) + 1; durHint()
+    }
+    function clearEnd() { endTouched = true; $('#hdur').value = ''; durHint() }
+    function stopHabit(id) {
+      const h = S.habits.find(x => x.id === id); if (!h) return;
+      const last = done(h, fromKey(todayK)) ? todayK : key(addDays(fromKey(todayK), -1));
+      h.until = last; save(); closeModal(); render(); toast(last === todayK ? 'Habit stopped. It won’t repeat after today.' : 'Habit stopped. Find it in Settings → Habits to resume it.')
+    }
+    function resumeHabit(id) { const h = S.habits.find(x => x.id === id); if (!h) return; h.until = ''; save(); closeModal(); render(); toast('Habit resumed.') }
+    function manageHabits() { view = 'settings'; setSub = 'habits'; render() }
+    let setSub = null;
+    function settingsSub() {
+      return `<button onclick="setSub=null;render()" class="flex items-center gap-1.5 text-sm font-semibold opacity-60 hover:opacity-100 mt-1"><i data-lucide="chevron-left" class="w-4 h-4"></i>Settings</button>` + (setSub === 'habits' ? habitsMgr() : catsView())
+    }
+    function settingsNav() {
+      const item = (id, ic, t, d) => `<button onclick="setSub='${id}';render()" class="w-full flex items-center gap-3 text-left py-4 px-1 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/40 transition-colors"><span class="w-9 h-9 rounded-xl border border-neutral-300 dark:border-neutral-700 flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-4 h-4"></i></span><span class="flex-1 min-w-0"><span class="block font-semibold text-sm">${t}</span><span class="block text-xs opacity-50 mt-0.5">${d}</span></span><i data-lucide="chevron-right" class="w-4 h-4 opacity-40 shrink-0"></i></button>`;
+      return `<div class="mt-5 mb-4 card card-border divide-y divide-neutral-200 dark:divide-neutral-800">${item('habits', 'repeat', 'Manage habits', 'Edit, stop or resume any habit.')}${item('cats', 'tag', 'Categories', 'Rename, recolor or remove categories.')}</div>`
+    }
+    function habitsMgr() {
+      const ib = 'shrink-0 p-1.5 rounded-lg opacity-40 hover:opacity-90 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all';
+      const rows = S.habits.map(h => {
+        const ended = h.until && h.until <= todayK;
+        return `<li class="flex items-center gap-2.5 py-2.5 px-1"><span class="w-2 h-2 rounded-full shrink-0" style="background:${catColor(h.cat)}"></span>
+    <div class="min-w-0 flex-1 ${ended ? 'opacity-50' : ''}"><p class="text-sm font-semibold truncate">${esc(h.name)}</p><p class="text-xs opacity-60 truncate">${esc(habitStatus(h))}${h.days.length ? ' · ' + h.days.map(i => DN[i]).join(', ') : ''}</p></div>
+    <button onclick="${ended ? 'resumeHabit' : 'stopHabit'}('${h.id}')" class="shrink-0 px-2.5 py-1 text-xs font-semibold border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800">${ended ? 'Resume' : 'Stop'}</button>
+    <button onclick="habitForm('habit','${h.id}')" aria-label="Edit ${esc(h.name)}" class="${ib}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></li>`
+      }).join('');
+      return `<section id="allhabits" class="mt-5 mb-8"><h2 class="font-bold text-sm mb-0.5">Habits</h2><p class="text-xs opacity-50">Edit, stop or resume any habit, including ones not scheduled today.</p>
+  <ul class="mt-3 card card-border divide-y divide-neutral-200 dark:divide-neutral-800">${rows || '<li class="py-4 text-sm opacity-50 text-center">No habits yet.</li>'}</ul></section>`
+    }
+    function sessionForm(id) {
+      const x = S.sessions.find(y => y.id === id); if (!x) return; editSid = id; const d = new Date(x.start);
+      const inp = 'w-full mb-3.5 px-3.5 py-2.5 bg-stone-100/70 dark:bg-neutral-800/70 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:border-accent outline-none transition-colors text-sm', lb = 'block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5';
+      const num = (i, l, v, mx) => `<label class="text-xs font-semibold opacity-70">${l}<input id="${i}" type="number" min="0" max="${mx}" value="${v}" class="${inp} !mt-1 !mb-0"></label>`;
+      modal(`<h2 class="text-xl font-bold mb-4">Edit session</h2>
+  <label class="${lb}" for="esn">Name</label><input id="esn" maxlength="40" value="${esc(x.name)}" class="${inp}">
+  <label class="${lb}" for="esm">Method</label><select id="esm" class="${inp}">${Object.entries(MODES).map(([k, v]) => `<option value="${k}" ${k === x.mode ? 'selected' : ''}>${v}</option>`).join('')}</select>
+  <div class="grid grid-cols-2 gap-3"><div><label class="${lb}" for="esd">Date</label><input id="esd" type="date" value="${key(d)}" class="${inp}"></div><div><label class="${lb}" for="est">Start time</label><input id="est" type="time" value="${pad(d.getHours())}:${pad(d.getMinutes())}" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div></div>
+  <p class="${lb}">Duration</p><div class="grid grid-cols-3 gap-3 mb-3.5">${num('esh', 'Hours', Math.floor(x.dur / 3600), 99)}${num('esmn', 'Min', Math.floor(x.dur % 3600 / 60), 59)}${num('ess', 'Sec', Math.round(x.dur % 60), 59)}</div>
+  <label class="${lb}" for="eso">Notes</label><textarea id="eso" rows="3" class="${inp} resize-none">${esc(x.notes)}</textarea>
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="dismissModal()">Cancel</button><button class="${btnP}" onclick="saveSessionEdit()">Save changes</button></div>`);
+      formSnapFn = () => JSON.stringify(['esn', 'esm', 'esd', 'est', 'esh', 'esmn', 'ess', 'eso'].map(i => { const e = $('#' + i); return e && e.value })); formSaveFn = saveSessionEdit; formSnap = formSnapFn()
+    }
+    function saveSessionEdit() {
+      const x = S.sessions.find(y => y.id === editSid); if (!x) return closeModal();
+      const dv = $('#esd').value, tv = $('#est').value, dur = Math.round((+$('#esh').value || 0) * 3600 + (+$('#esmn').value || 0) * 60 + (+$('#ess').value || 0));
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dv) || !/^\d{2}:\d{2}$/.test(tv)) return toast('Pick a valid date and start time.', 'err');
+      if (dur < 1) return toast('Duration must be at least 1 second.', 'err');
+      const [y, mo, da] = dv.split('-').map(Number), [hh, mm] = tv.split(':').map(Number), start = new Date(y, mo - 1, da, hh, mm).getTime();
+      if (start > Date.now()) return toast('A session can’t start in the future.', 'err');
+      x.name = $('#esn').value.trim() || defName(start); x.notes = $('#eso').value.trim(); x.mode = $('#esm').value; x.start = start; x.dur = dur; x.date = key(new Date(start));
+      anaK = x.date; save(); closeModal(); render(); toast('Session updated.')
+    }
 
     /* ---------- views ---------- */
     const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -743,7 +1039,8 @@
     function todayView() {
       const vd = fromKey(viewK), future = viewK > todayK, isToday = viewK === todayK, n = dayDiff(viewK);
       const habits = S.habits.filter(h => sched(h, vd)), tasks = S.tasks.filter(t => t.date === viewK);
-      const inCat = x => filter === 'All' || x.cat === filter, fh = habits.filter(inCat), ft = tasks.filter(inCat);
+      const inCat = x => filter === 'All' || x.cat === filter, fh = habits.filter(inCat), ft = tasks.filter(inCat), byTime = (a, b) => (a.tStart || '99:99') < (b.tStart || '99:99') ? -1 : (a.tStart || '99:99') > (b.tStart || '99:99') ? 1 : 0;
+      fh.sort(byTime); ft.sort(byTime);
       const hd = habits.filter(h => done(h, vd)).length, td = tasks.filter(t => t.done).length;
       const total = habits.length + tasks.length, dn = hd + td, pct = total ? Math.round(dn / total * 100) : 0;
       const dt = vd.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -751,10 +1048,11 @@
       const empty = t => `<p class="mt-2 py-6 text-sm opacity-50 text-center">${t}</p>`;
       const cnt = (a, b) => future ? `${b} planned` : `${a} / ${b} done`;
       const head = (t, a, b) => `<div class="sec-head"><h2 class="font-bold text-base">${t}</h2><span class="text-xs font-medium opacity-50">${cnt(a, b)}</span></div>`;
-      const meta = (x, extra) => `<p class="text-xs opacity-50 truncate mt-0.5">${dot(catColor(x.cat))}${esc(x.cat || 'Uncategorized')}${extra || ''}${x.notes ? ' · ' + esc(x.notes) : ''}</p>`;
-      const box = (d, fn, name) => `<button onclick="${fn}" aria-label="${d ? 'Mark not done' : 'Mark done'}: ${esc(name)}" aria-pressed="${d}" class="check-box ${d ? 'done' : 'undone'} ${future ? 'opacity-40' : ''}"><i data-lucide="check" class="w-4 h-4"></i></button>`;
-      const delBtn = (fn, label) => `<button onclick="${fn}" aria-label="${label}" class="shrink-0 p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`;
-      const streakBadge = st => `<span class="streak-badge ${st ? 'active' : 'zero'} shrink-0"><i data-lucide="flame" class="w-3 h-3"></i>${st}d</span>`;
+      const meta = (x, extra) => `<p class="text-xs opacity-50 truncate mt-0.5">${dot(catColor(x.cat))}${esc(x.cat || 'Uncategorized')}${extra || ''}${tmx(x)}${x.notes ? ' · ' + esc(x.notes) : ''}</p>`;
+      const box = (d, fn, name) => `<button onclick="${fn}" aria-label="${d ? 'Mark not done' : 'Mark done'}: ${esc(name)}" title="${d ? 'Mark as not done' : 'Mark as done'}" aria-pressed="${d}" class="check-box ${d ? 'done' : 'undone'} ${future ? 'opacity-40' : ''}"><i data-lucide="check" class="w-4 h-4"></i></button>`;
+      const delBtn = (fn, label) => `<button onclick="${fn}" aria-label="${label}" title="${label}" class="shrink-0 p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`;
+      const editBtn = (fn, label) => `<button onclick="${fn}" aria-label="${label}" title="${label}" class="shrink-0 p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>`;
+      const streakBadge = st => `<span class="streak-badge ${st ? 'active' : 'zero'} shrink-0" title="Current streak: ${st} day${st === 1 ? '' : 's'}"><i data-lucide="flame" class="w-3 h-3"></i>${st}d</span>`;
       const listWrap = 'divide-y divide-neutral-200 dark:divide-neutral-800/80 border-t border-b border-neutral-200 dark:border-neutral-800/80 mt-2';
       return `${S.sampleActive ? `<div class="sample-banner"><span class="opacity-70">You\'re viewing sample habits.</span><button class="font-semibold text-accent dark:text-blue-400 shrink-0" onclick="clearSample()">Clear data</button></div>` : ''}
   <div class="flex items-center gap-2.5">
@@ -780,14 +1078,15 @@
   ${head('Habits', hd, habits.length)}
   ${fh.length ? `<ul class="${listWrap}">${fh.map(h => {
         const d = done(h, vd), st = streak(h, viewK); return `<li class="habit-row border-neutral-200 dark:border-neutral-800/80">${box(d, `toggle('${h.id}')`, h.name)}
-    <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate ${d ? 'line-through opacity-40' : ''}">${esc(h.name)}</p>${meta(h, h.days.length ? ' · ' + h.days.map(i => DN[i]).join(', ') : '')}</div>
-    ${streakBadge(st)}${delBtn(`delHabit('${h.id}')`, 'Delete habit')}</li>`
+    <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate ${d ? 'line-through opacity-40' : ''}">${esc(h.name)}</p>${meta(h, (h.days.length ? ' · ' + h.days.map(i => DN[i]).join(', ') : '') + (h.until ? (h.until === viewK ? ' · last day' : ' · until ' + shortDate(h.until)) : ''))}</div>
+    ${streakBadge(st)}${editBtn(`habitForm('habit','${h.id}')`, 'Edit habit')}${delBtn(`delHabit('${h.id}')`, 'Delete habit')}</li>`
       }).join('')}</ul>` : empty(habits.length ? 'No habits in this category.' : 'No habits scheduled for this day. <button type="button" onclick="habitForm(\'habit\')" class="font-semibold text-accent dark:text-blue-400 underline underline-offset-2">Add a habit</button>')}
   ${head('Tasks', td, tasks.length)}
   ${ft.length ? `<ul class="${listWrap}">${ft.map(t => `<li class="habit-row border-neutral-200 dark:border-neutral-800/80">${box(t.done, `toggleTask('${t.id}')`, t.name)}
     <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate ${t.done ? 'line-through opacity-40' : ''}">${esc(t.name)}</p>${meta(t)}</div>
-    ${delBtn(`delTask('${t.id}')`, 'Delete task')}</li>`).join('')}</ul>` : empty(tasks.length ? 'No tasks in this category.' : 'No tasks for this day. <button type="button" onclick="habitForm(\'task\')" class="font-semibold text-accent dark:text-blue-400 underline underline-offset-2">Add a task</button>')}
-  ${S.habits.length + S.tasks.length ? '' : '<p class="text-sm opacity-50 text-center mt-10">Add a habit to build a streak, or a task for a single day.</p>'}
+    ${editBtn(`habitForm('task','${t.id}')`, 'Edit task')}${delBtn(`delTask('${t.id}')`, 'Delete task')}</li>`).join('')}</ul>` : empty(tasks.length ? 'No tasks in this category.' : 'No tasks for this day. <button type="button" onclick="habitForm(\'task\')" class="font-semibold text-accent dark:text-blue-400 underline underline-offset-2">Add a task</button>')}
+  ${S.habits.length ? `<p class="text-center mt-6"><button type="button" onclick="manageHabits()" class="text-xs font-semibold opacity-60 hover:opacity-100 underline underline-offset-2">Manage all habits (including stopped)</button></p>` : ''}
+  ${S.habits.length + S.tasks.length ? '' : '<div class="mt-10 text-center"><p class="text-sm opacity-60 mb-3">Nothing here yet. A habit repeats and builds a streak. A task happens once, on one day.</p><button class="px-4 py-2 text-sm font-semibold rounded-xl bg-accent text-white hover:opacity-90" onclick="habitForm()">Add your first habit</button></div>'}
   <button onclick="habitForm()" class="${btnP} fab fixed bottom-6 right-6 shadow-xl flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold" style="margin-bottom:env(safe-area-inset-bottom)"><i data-lucide="plus" class="w-4 h-4"></i>Add</button>`
     }
     function clearSample() { S.habits = S.habits.filter(h => !h.sample); const ids = new Set(S.habits.map(h => h.id)); for (const k in S.logs) { S.logs[k] = S.logs[k].filter(x => ids.has(x)); if (!S.logs[k].length) delete S.logs[k] } S.sampleActive = false; save(); render(); toast('Sample data cleared.') }
@@ -810,11 +1109,12 @@
       const m = (v, l) => `<div class="text-center py-3 sm:py-4"><p class="text-3xl sm:text-4xl font-bold tracking-tight">${v}</p><p class="text-xs sm:text-sm opacity-50 mt-0.5">${l}</p></div>`;
       const rangeBtn = n => `<button onclick="S.prefs.range=${n};save();render()" aria-pressed="${rng === n}" class="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-full border transition-colors ${rng === n ? 'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100' : 'border-neutral-300 dark:border-neutral-700 opacity-60 hover:opacity-100'}">${n}M</button>`;
       return `<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Insights</h1>
+  <p class="text-xs opacity-60 mt-1">Your progress across all habits. Darker squares mean more habits done that day.</p>
   <div class="grid grid-cols-3 gap-2 mt-4 card card-border">
     ${m(best + '<span class="text-base sm:text-xl font-semibold"> days</span>', 'Best streak')}
     <div class="border-x border-neutral-200 dark:border-neutral-800">
     ${m(tot, 'Completions')}</div>
-    ${m(rate + '%', 'Rate')}
+    ${m(rate + '%', 'Completion rate')}
   </div>
   <div class="flex items-center justify-between mt-6 mb-3">
     <h2 class="font-bold text-sm">Last ${rng} months</h2>
@@ -828,10 +1128,11 @@
   ${studyStats()}`
     }
     function settingsView() {
+      if (setSub) return settingsSub();
       const row = (t, d, b) => `<div class="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="font-semibold text-sm">${t}</p><p class="text-xs opacity-50 mt-0.5">${d}</p></div><div class="shrink-0">${b}</div></div>`;
       const actionBtn = (label, fn, danger = false) => `<button class="${danger ? 'px-4 py-2 text-xs font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700' : 'px-4 py-2 text-xs font-semibold border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800'}" onclick="${fn}">${label}</button>`;
       return `<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
-  ${catsView()}
+  ${settingsNav()}${notifRow()}
   <h2 class="font-bold text-sm mt-8 mb-3">Data</h2>
   <div class="card card-border divide-y divide-neutral-200 dark:divide-neutral-800">
   ${row('Backup', 'Save all habits, history and settings to a file.', actionBtn('Download Backup (.json)', 'backup()'))}
@@ -847,10 +1148,14 @@
         <span class="w-12 h-12 rounded-xl bg-[#15803d] text-white flex items-center justify-center shrink-0">${logo('w-6 h-6', 3)}</span>
         <div class="min-w-0"><p class="text-xl font-bold tracking-tight leading-tight">Be Discipline</p><p class="text-xs opacity-50 mt-0.5">Build habits. Stay consistent.</p></div>
       </div>
-      <dl class="mt-5 divide-y divide-neutral-200 dark:divide-neutral-800">
+      <div class="mt-5 flex items-start gap-3 rounded-xl border border-[#15803d]/30 bg-[#15803d]/10 px-4 py-3">
+        <span class="w-8 h-8 rounded-lg bg-[#15803d] text-white flex items-center justify-center shrink-0"><i data-lucide="heart" class="w-4 h-4"></i></span>
+        <div class="min-w-0"><p class="text-sm font-bold leading-tight">Free, always</p><p class="text-xs opacity-70 mt-0.5"><strong class="font-bold">Be Discipline</strong> will always be free.</p></div>
+      </div>
+      <dl class="mt-2 divide-y divide-neutral-200 dark:divide-neutral-800">
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="tag" class="w-3.5 h-3.5"></i>Version</dt><dd class="font-semibold">${APP_VERSION}</dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="user" class="w-3.5 h-3.5"></i>Built by</dt><dd><a class="author" href="https://misalignedink.github.io" target="_blank" rel="noopener noreferrer">Sayak Majumder<i data-lucide="arrow-up-right" class="w-4 h-4"></i><span class="hint">Visit Sayak's website</span></a></dd></div>
-        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i>Made with</dt><dd class="font-semibold">Vibe coding</dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i>Built with</dt><dd class="font-semibold">AI assistance</dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>Your data</dt><dd class="font-semibold">Stays on device</dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>Android App</dt><dd><a class="author" href="release/bediscipline.apk" download>Download APK<i data-lucide="download" class="w-4 h-4"></i><span class="hint">Download Android APK</span></a></dd></div>
         <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2 opacity-50"><i data-lucide="wifi-off" class="w-3.5 h-3.5"></i>Works offline</dt><dd class="font-semibold">Yes</dd></div>
@@ -906,9 +1211,11 @@
     function normalize(o) {
       o.cats = Array.isArray(o.cats) ? o.cats.filter(c => c && typeof c.name === 'string' && c.name.trim()).map(c => ({ name: c.name.trim(), color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#8a8a8a' })) : DEFCATS.map(([name, color]) => ({ name, color }));
       o.habits.forEach(h => { if (h.cat && !o.cats.some(c => c.name === h.cat)) o.cats.push({ name: h.cat, color: '#8a8a8a' }) });
-      o.tasks = (Array.isArray(o.tasks) ? o.tasks : []).filter(t => t && typeof t.id === 'string' && typeof t.name === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date)).map(t => ({ id: t.id, name: t.name, cat: t.cat || '', date: t.date, notes: t.notes || '', done: !!t.done }));
+      o.habits.forEach(h => { if (!/^\d{4}-\d{2}-\d{2}$/.test(h.until)) h.until = ''; h.tStart = tmOk(h.tStart); h.tEnd = tmOk(h.tEnd); h.focus = !!h.focus && !!h.tStart; if (!FMODES.includes(h.fMode)) h.fMode = 'pomodoro' });
+      o.tasks = (Array.isArray(o.tasks) ? o.tasks : []).filter(t => t && typeof t.id === 'string' && typeof t.name === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date)).map(t => ({ id: t.id, name: t.name, cat: t.cat || '', date: t.date, notes: t.notes || '', done: !!t.done, tStart: tmOk(t.tStart), tEnd: tmOk(t.tEnd), focus: !!t.focus && !!tmOk(t.tStart), fMode: FMODES.includes(t.fMode) ? t.fMode : 'pomodoro' }));
       o.tasks.forEach(t => { if (t.cat && !o.cats.some(c => c.name === t.cat)) o.cats.push({ name: t.cat, color: '#8a8a8a' }) });
       o.sessions = (Array.isArray(o.sessions) ? o.sessions : []).filter(x => x && typeof x.id === 'string' && Number.isFinite(x.dur) && x.dur > 0 && Number.isFinite(x.start) && ['timer', 'stopwatch', 'pomodoro'].includes(x.mode)).map(x => ({ id: x.id, name: String(x.name || 'Study session'), notes: String(x.notes || ''), start: x.start, dur: x.dur, mode: x.mode, date: /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? x.date : key(new Date(x.start)) }));
+      o.fired = o.fired && typeof o.fired === 'object' && !Array.isArray(o.fired) ? o.fired : {};
       return o
     }
     const catColor = n => (S.cats.find(c => c.name === n) || {}).color || '#8a8a8a';
@@ -934,15 +1241,15 @@
     function catOptions() { return S.cats.length ? S.cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('') : '<option value="">Uncategorized</option>' }
     const catTaken = (n, except = -1) => S.cats.some((c, i) => i !== except && c.name.toLowerCase() === n.toLowerCase());
     function addCat() {
-      const n = $('#nc').value.trim(); if (!n) { $('#nc').focus(); return toast('Enter a category name.', 'err') }
+      const n = cap($('#nc').value.trim()); if (!n) { $('#nc').focus(); return toast('Enter a category name.', 'err') }
       if (catTaken(n)) return toast('That category already exists.', 'err');
       S.cats.push({ name: n, color: $('#ncc').value }); save(); render(); toast('Category added.')
     }
     function renameCat(i, v) {
-      v = v.trim(); const old = S.cats[i].name;
+      v = cap(v.trim()); const old = S.cats[i].name;
       if (!v) { toast('Category name can’t be empty.', 'err'); return render() }
       if (catTaken(v, i)) { toast('That category already exists.', 'err'); return render() }
-      if (v === old) return; S.habits.forEach(h => { if (h.cat === old) h.cat = v }); S.tasks.forEach(t => { if (t.cat === old) t.cat = v }); if (filter === old) filter = v; S.cats[i].name = v; save(); render(); toast('Category renamed.')
+      if (v === old) return render(); S.habits.forEach(h => { if (h.cat === old) h.cat = v }); S.tasks.forEach(t => { if (t.cat === old) t.cat = v }); if (filter === old) filter = v; S.cats[i].name = v; save(); render(); toast('Category renamed.')
     }
     function recolorCat(i, v) { S.cats[i].color = v; save(); render() }
     function deleteCat(i) {
@@ -1040,14 +1347,20 @@
   <label class="block text-sm font-medium mb-1" for="sno">Notes (optional)</label>
   <textarea id="sno" rows="3" placeholder="What did you study?" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600"></textarea>
   <div class="flex gap-2 justify-end"><button class="${btn}" onclick="discardSession()">Discard</button><button class="${btnP}" onclick="saveSession()">Save session</button></div>`, true);
+      if (activePlan) $('#sn').value = activePlan.name;
       $('#sn').focus()
     }
     function saveSession() {
-      const p = pending; if (!p) return; pending = null;
+      const p = pending; if (!p) return; pending = null; const plan = activePlan; activePlan = null;
       S.sessions.push({ id: uid(), name: $('#sn').value.trim() || defName(p.began), notes: $('#sno').value.trim(), start: p.began, dur: p.sec, mode: p.mode, date: key(new Date(p.began)) });
-      anaK = key(new Date(p.began)); save(); closePop(); if (p.after) p.after(); toast('Session saved.')
+      let msg = 'Session saved.';
+      if (plan) {
+        const x = (plan.kind === 'task' ? S.tasks : S.habits).find(y => y.id === plan.id);
+        if (x) { if (plan.kind === 'task') x.done = true; else { const l = (S.logs[plan.k] ??= []); if (!l.includes(x.id)) l.push(x.id) } msg = `Session saved. “${x.name}” marked as done.` }
+      }
+      anaK = key(new Date(p.began)); save(); closePop(); if (p.after) p.after(); toast(msg)
     }
-    function discardSession() { const p = pending; pending = null; closePop(); if (p && p.after) p.after(); toast('Session discarded.') }
+    function discardSession() { const p = pending; pending = null; activePlan = null; closePop(); if (p && p.after) p.after(); toast('Session discarded.') }
     const none = () => toast('Nothing to save yet. Start first.', 'err');
     function timerStop() { const t = TM().timer, el = t.dur - remain(t); if (el < 1) return none(); t.left = remain(t); t.run = false; save(); askSave('timer', el, t.began, resetTimer) }
     function swStop() { const w = TM().sw, el = (w.run ? Date.now() - w.start : w.el) / 1000; if (el < 1) return none(); w.el = Math.round(el * 1000); w.run = false; save(); askSave('stopwatch', el, w.began, swReset) }
@@ -1066,20 +1379,20 @@
       }).join('');
       const nb = 'shrink-0 w-9 h-9 rounded-xl border border-neutral-300 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors';
       const seg = (v, l) => `<button onclick="setPie('${v}')" aria-pressed="${pieBy === v}" class="px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${pieBy === v ? 'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100' : 'border-neutral-300 dark:border-neutral-700 opacity-60 hover:opacity-100'}">${l}</button>`;
-      return `<h2 class="mt-10 text-xl sm:text-2xl font-bold tracking-tight">Study time</h2>
+      return `<h2 class="mt-10 text-xl sm:text-2xl font-bold tracking-tight">Focus time</h2>
   <div class="flex items-center gap-2.5 mt-4">
     <button onclick="anaGo(-1)" aria-label="Previous day" class="${nb}"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-    <div class="flex-1 text-center"><p class="font-bold text-sm">${relLabel(anaK)}</p><p class="text-xs opacity-50">${total ? fmtDur(total) + ' studied' : 'No study logged'}</p></div>
+    <div class="flex-1 text-center"><p class="font-bold text-sm">${relLabel(anaK)}</p><p class="text-xs opacity-50">${total ? fmtDur(total) + ' focused' : 'No focus time logged'}</p></div>
     <button onclick="anaGo(1)" aria-label="Next day" class="${nb}"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
   <div class="flex items-center justify-center gap-3 mt-2.5 text-xs font-semibold">${anaK === todayK ? '' : `<button class="text-accent dark:text-blue-400 hover:underline" onclick="anaK=todayK;render()">↩ Today</button>`}<button class="flex items-center gap-1 opacity-50 hover:opacity-80" onclick="openCal(anaK,k=>{anaK=k;render()})"><i data-lucide="calendar" class="w-3.5 h-3.5"></i>&nbsp;Pick date</button></div>
   <div class="flex justify-center gap-2 mt-4" role="group" aria-label="Group the chart">${seg('method', 'By method')}${seg('session', 'By session')}</div>
   <div class="mt-5 flex flex-col sm:flex-row items-center justify-center gap-6">
-    <svg viewBox="0 0 32 32" class="w-36 h-36 sm:w-44 sm:h-44 shrink-0" role="img" aria-label="Study time split">${items.length ? slices : '<circle cx="16" cy="16" r="16" fill="rgba(127,127,127,.18)"/>'}</svg>
+    <svg viewBox="0 0 32 32" class="w-36 h-36 sm:w-44 sm:h-44 shrink-0" role="img" aria-label="Focus time split">${items.length ? slices : '<circle cx="16" cy="16" r="16" fill="rgba(127,127,127,.18)"/>'}</svg>
     ${items.length ? `<ul class="w-full space-y-2">${items.map(it => `<li class="flex items-center gap-2.5 text-sm"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${it.color}"></span><span class="flex-1 truncate">${esc(it.label)}</span><span class="font-bold">${fmtDur(it.dur)}</span><span class="opacity-40 text-xs w-9 text-right">${Math.round(it.pct)}%</span></li>`).join('')}</ul>` : ''}</div>
   ${day.length ? `<ul class="mt-5 card card-border divide-y divide-neutral-200 dark:divide-neutral-800">${day.map(x => `<li class="flex items-start gap-3 py-3.5 px-1">
     <span class="mt-1 w-2 h-2 rounded-full shrink-0" style="background:${MCOL[x.mode]}"></span>
     <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate">${esc(x.name)}</p><p class="text-xs opacity-50">${MODES[x.mode]} · ${clock(x.start)}</p>${x.notes ? `<p class="text-xs mt-1 opacity-70 whitespace-pre-line break-words">${esc(x.notes)}</p>` : ''}</div>
-    <span class="font-bold text-sm whitespace-nowrap">${fmtDur(x.dur)}</span><button onclick="delSession('${x.id}')" aria-label="Delete session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')}</ul>`
+    <span class="font-bold text-sm whitespace-nowrap">${fmtDur(x.dur)}</span><button onclick="sessionForm('${x.id}')" aria-label="Edit session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button onclick="delSession('${x.id}')" aria-label="Delete session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')}</ul>`
           : `<p class="mt-5 py-6 text-sm opacity-50 text-center">No sessions today. Use the 'Focus' tab to log time.</p>`}`
     }
 
@@ -1098,6 +1411,7 @@
     <div class="h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800"><div id="pomo-bar" class="h-full rounded-full bg-accent" style="width:0"></div></div>
     <div class="flex flex-wrap gap-2 justify-center mt-6">${P.fin ? `<button class="${btnP}" onclick="pomoRestart()">Start again</button>` : `<button class="${btnP}" onclick="startStop(TM().pomo,()=>stepSecs(TM().pomo))">${P.run ? 'Pause' : 'Start'}</button><button class="${btn}" onclick="pomoReset()">Reset</button><button class="${btn}" onclick="pomoNext(false)">Skip</button><button class="${btn}" onclick="pomoStop()">Stop</button>`}</div>
     <p class="text-center text-xs opacity-50 mt-4">${P.done} focus session${P.done === 1 ? '' : 's'} done today &middot; ${P.fin ? 'All done! 🎉' : plan[P.idx + 1] ? `Up next: ${names[plan[P.idx + 1]]}, ${c[plan[P.idx + 1]]} min` : 'Last step'}</p>
+    <p class="text-center text-[11px] opacity-40 mt-2">Skip jumps to the next step. Stop ends the session so you can save it.</p>
     <ol class="mt-4 flex flex-wrap gap-1.5 justify-center" aria-label="Your plan">${(() => {
             let fc = 0; return plan.map((m, i) => {
               const label = m === 'focus' ? `F${++fc}` : m === 'short' ? 'S' : 'L', isDone = P.fin || i < P.idx, cur = !P.fin && i === P.idx;
@@ -1115,16 +1429,20 @@
         const T_ = t.timer;
         body = `${big('tm-timer', fmt(remain(T_)))}
     <div class="flex flex-wrap gap-2 justify-center"><button class="${btnP}" onclick="startStop(TM().timer,()=>TM().timer.dur)">${T_.run ? 'Pause' : 'Start'}</button><button class="${btn}" onclick="timerStop()">Stop</button><button class="${btn}" onclick="resetTimer()">Reset</button></div>
-    <div class="flex flex-wrap gap-2 justify-center mt-6">${[15, 30, 60].map(m => `<button onclick="setTimerDur(${m})" class="px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${T_.dur === m * 60 ? 'border-accent text-accent dark:text-blue-400 bg-blue-50 dark:bg-blue-950' : 'border-neutral-300 dark:border-neutral-700 hover:border-accent'}">${m}m</button>`).join('')}</div>
+    <p class="text-center text-[11px] opacity-40 mt-3">Choose a length below, then press Start. Stop ends it early so you can save it.</p>
+    <div class="flex flex-wrap gap-2 justify-center mt-4">${[15, 30, 60].map(m => `<button onclick="setTimerDur(${m})" class="px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${T_.dur === m * 60 ? 'border-accent text-accent dark:text-blue-400 bg-blue-50 dark:bg-blue-950' : 'border-neutral-300 dark:border-neutral-700 hover:border-accent'}">${m}m</button>`).join('')}</div>
     <label class="block text-xs font-medium opacity-60 mt-5 max-w-[8rem] mx-auto">Custom (min)<input type="number" min="1" max="999" value="${Math.round(T_.dur / 60)}" onchange="setTimerDur(this.value)" class="w-full mt-1 px-3 py-2 text-sm bg-transparent border border-neutral-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-accent"></label>`
       }
       if (sub === 'stopwatch') {
         const w = t.sw;
         body = `${big('tm-sw', fmtMs(w.run ? Date.now() - w.start : w.el))}
     <div class="flex flex-wrap gap-2 justify-center"><button class="${btnP}" onclick="swToggle()">${w.run ? 'Pause' : w.el ? 'Resume' : 'Start'}</button><button class="${btn} ${w.run ? '' : 'opacity-40'}" onclick="swLap()">Lap</button><button class="${btn}" onclick="swStop()">Stop</button><button class="${btn}" onclick="swReset()">Reset</button></div>
+    <p class="text-center text-[11px] opacity-40 mt-3">Lap marks a split time. Stop ends it so you can save the session.</p>
     ${w.laps.length ? `<ol class="mt-6 card card-border divide-y divide-neutral-200 dark:divide-neutral-800 tabular-nums">${w.laps.map((l, i) => `<li class="flex justify-between py-2.5 px-1 text-sm"><span class="opacity-50">Lap ${i + 1}</span><span class="opacity-40 text-xs">+${fmtMs(l - (w.laps[i - 1] || 0))}</span><span class="font-bold">${fmtMs(l)}</span></li>`).reverse().join('')}</ol>` : ''}`
       }
       return `<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Focus</h1>
+  <p class="text-xs opacity-60 mt-1">Run a timer, stopwatch or Pomodoro, then save the session to track your focus time.</p>
+  ${plannedCard()}
   <div class="flex gap-1 mt-4 bg-neutral-100 dark:bg-neutral-900 rounded-xl p-1">${subs.map(([id, l]) => `<button onclick="sub='${id}';render()" class="flex-1 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-colors ${sub === id ? 'bg-white dark:bg-neutral-800 shadow-sm' : 'opacity-50 hover:opacity-80'}">${l}</button>`).join('')}</div>
   <div class="mt-5">${sub === 'pomodoro' ? body : `<div class="card card-border px-5 pb-6 pt-1">${body}</div>`}</div>`
     }
@@ -1136,11 +1454,11 @@
       $('#app').innerHTML = `<header class="flex items-center justify-between py-4 sm:py-5">
     <span class="font-bold text-base sm:text-lg tracking-tight flex items-center gap-2"><span class="w-6 h-6 rounded-md bg-[#15803d] text-white flex items-center justify-center">${logo('w-3.5 h-3.5')}</span>Be Discipline</span>
     ${themeBtn}</header>
-  <nav id="desktop-nav" class="hidden md:flex overflow-x-auto border-b border-neutral-200 dark:border-neutral-800 mb-8">${tabs.map(([id, ic, l]) => `<button onclick="view='${id}';render()" class="flex items-center gap-2 px-4 py-3 text-sm font-semibold -mb-px border-b-2 transition-colors ${view === id ? 'border-accent text-accent' : 'border-transparent opacity-50 hover:opacity-80'}"><i data-lucide="${ic}" class="w-4 h-4"></i>${l}</button>`).join('')}</nav>
+  <nav id="desktop-nav" class="hidden md:flex overflow-x-auto border-b border-neutral-200 dark:border-neutral-800 mb-8">${tabs.map(([id, ic, l]) => `<button onclick="view='${id}';setSub=null;render()" class="flex items-center gap-2 px-4 py-3 text-sm font-semibold -mb-px border-b-2 transition-colors ${view === id ? 'border-accent text-accent' : 'border-transparent opacity-50 hover:opacity-80'}"><i data-lucide="${ic}" class="w-4 h-4"></i>${l}</button>`).join('')}</nav>
   <main>${view === 'today' ? todayView() : view === 'study' ? studyView() : view === 'stats' ? statsView() : settingsView()}</main>`;
       /* populate mobile bottom nav */
       const mn = document.getElementById('mobile-nav');
-      if (mn) { mn.innerHTML = `<div class="flex w-full">${tabs.map(([id, ic, l]) => `<button onclick="view='${id}';render()" aria-label="${l}" aria-current="${view === id ? 'page' : 'false'}" class="flex-1 flex flex-col items-center justify-center pt-2 pb-1.5 gap-0.5 text-[10px] font-semibold transition-colors ${view === id ? 'text-accent dark:text-blue-400' : 'text-neutral-400 dark:text-neutral-500'}"><i data-lucide="${ic}" class="w-5 h-5 mb-0.5 ${view === id ? '' : ''}"></i><span>${l}</span></button>`).join('')}</div>`; }
+      if (mn) { mn.innerHTML = `<div class="flex w-full">${tabs.map(([id, ic, l]) => `<button onclick="view='${id}';setSub=null;render()" aria-label="${l}" aria-current="${view === id ? 'page' : 'false'}" class="flex-1 flex flex-col items-center justify-center pt-2 pb-1.5 gap-0.5 text-[10px] font-semibold transition-colors ${view === id ? 'text-accent dark:text-blue-400' : 'text-neutral-400 dark:text-neutral-500'}"><i data-lucide="${ic}" class="w-5 h-5 mb-0.5 ${view === id ? '' : ''}"></i><span>${l}</span></button>`).join('')}</div>`; }
       lucide.createIcons()
     }
 
@@ -1156,7 +1474,7 @@
       document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('[data-tip]')) hide() });
       document.addEventListener('focusout', hide); document.addEventListener('scroll', hide, true)
     })();
-    S = normalize(load()); save(); applyTheme(); render(); checkAppPopup(); setInterval(tick, 250);
+    S = normalize(load()); save(); applyTheme(); render(); checkAppPopup(); setInterval(tick, 250); setInterval(checkReminders, 15000); checkReminders();
     // Midnight rollover: re-render when the local date changes.
     setInterval(() => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } }, 30000);
     document.addEventListener('visibilitychange', () => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } });
