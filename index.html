@@ -613,12 +613,12 @@
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const pad = n => String(n).padStart(2, '0');
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    const tmOk = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : '', FMODES = ['timer', 'stopwatch', 'pomodoro'];
+    const tmOk = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : '';
     const key = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const fromKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d) };
     const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x };
     const uid = () => Math.random().toString(36).slice(2, 10);
-    let S, view = 'today', filter = 'All', todayK = key(new Date()), viewK = todayK, formType = 'habit', anaK = todayK, pieBy = 'method';
+    let S, view = 'today', filter = 'All', todayK = key(new Date()), viewK = todayK, formType = 'habit', openSessionId = null;
 
     /* ---------- storage ---------- */
     function seed() {
@@ -770,18 +770,10 @@
     </button>
 
     <div class="grid grid-cols-2 gap-3">
-      <div><label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hts">Start time <span class="normal-case font-medium opacity-70">(optional)</span></label><input id="hts" type="time" oninput="setFocusUI()" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div>
+      <div><label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hts">Start time <span class="normal-case font-medium opacity-70">(optional)</span></label><input id="hts" type="time" oninput="setTimeUI()" onchange="reqTimeNotif()" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div>
       <div><label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hte">End time <span class="normal-case font-medium opacity-70">(optional)</span></label><input id="hte" type="time" onclick="try{this.showPicker()}catch(e){}" class="${inp} time-field"></div>
     </div>
-    <label class="flex items-start gap-3 mb-3.5 cursor-pointer">
-      <input id="hfc" type="checkbox" onchange="fToggle()" class="w-4 h-4 mt-0.5 accent-[#2f3bff]">
-      <span><span class="block text-sm font-semibold">Plan as a focus session</span><span class="block text-xs opacity-60 mt-0.5">Optional. Adds it to the Focus tab and reminds you 30, 15 and 10 minutes before the start time.</span></span>
-    </label>
-    <div id="hfopts" class="hidden">
-      <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hfm">Focus method</label>
-      <select id="hfm" class="${inp}"><option value="timer">Timer</option><option value="stopwatch">Stopwatch</option><option value="pomodoro" selected>Pomodoro</option></select>
-      <p id="hfn" class="text-[11px] opacity-60 -mt-2 mb-3.5"></p>
-    </div>
+    <p id="hfn" class="text-[11px] opacity-60 -mt-2 mb-3.5"></p>
 
     <div id="rep">
       <div class="flex items-center justify-between mb-1.5"><p class="text-xs font-semibold uppercase tracking-wider opacity-60">Repeat</p><button type="button" id="hall" onclick="toggleAllDays()" class="text-xs font-semibold text-accent dark:text-blue-400 hover:underline">Select all</button></div>
@@ -813,7 +805,7 @@
       setType(type);
       if (id) {
         const it = (type === 'task' ? S.tasks : S.habits).find(x => x.id === id); if (!it) return closeModal();
-        $('#hn').value = it.name; $('#hno').value = it.notes || ''; $('#hts').value = it.tStart || ''; $('#hte').value = it.tEnd || ''; $('#hfc').checked = !!it.focus; $('#hfm').value = it.fMode || 'pomodoro'; setFormDate(type === 'task' ? it.date : it.created);
+        $('#hn').value = it.name; $('#hno').value = it.notes || ''; $('#hts').value = it.tStart || ''; $('#hte').value = it.tEnd || ''; setFormDate(type === 'task' ? it.date : it.created);
         if (!S.cats.some(c => c.name === it.cat)) $('#hc').insertAdjacentHTML('afterbegin', '<option value="">Uncategorized</option>');
         $('#hc').value = it.cat || '';
         document.querySelector('[data-t]').parentElement.style.display = 'none';
@@ -825,7 +817,7 @@
           $('#hst').innerHTML = `<div class="flex items-center justify-between gap-3 mb-3.5 px-3.5 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-sm"><span class="opacity-70">${esc(habitStatus(it))}</span><button type="button" class="${b}" onclick="formToggleHabit('${it.id}',${!!ended})">${ended ? 'Resume habit' : 'Stop habit'}</button></div>`;
         }
       }
-      setFocusUI(); formSnapFn = habitFormState; formSaveFn = addItem; formSnap = formSnapFn();
+      setTimeUI(); formSnapFn = habitFormState; formSaveFn = addItem; formSnap = formSnapFn();
       if (window.innerWidth >= 640) $('#hn').focus();
     }
     function setType(t) {
@@ -845,10 +837,9 @@
     function addItem() {
       const name = cap($('#hn').value.trim()); if (!name) { $('#hn').focus(); return toast('Enter a name.', 'err') }
       const date = /^\d{4}-\d{2}-\d{2}$/.test($('#hdt').dataset.k) ? $('#hdt').dataset.k : viewK, cat = $('#hc').value, notes = $('#hno').value.trim();
-      const ts = $('#hts').value, te = $('#hte').value, fc = $('#hfc').checked, tf = { tStart: ts, tEnd: te, focus: fc, fMode: $('#hfm').value };
+      const ts = $('#hts').value, te = $('#hte').value, tf = { tStart: ts, tEnd: te };
       if (te && !ts) { $('#hts').focus(); return toast('Add a start time before the end time.', 'err') }
       if (ts && te && te <= ts) { $('#hte').focus(); return toast('End time must be after the start time.', 'err') }
-      if (fc && !ts) { $('#hts').focus(); return toast('Set a start time to plan a focus session.', 'err') }
       let until = '';
       if (formType === 'habit') {
         const dv = $('#hdur').value.trim(), n = Math.round(+dv);
@@ -869,7 +860,7 @@
 
     /* ---------- edit / stop habits, tasks, sessions ---------- */
     let editId = null, editSid = null, formSnap = null, formSnapFn = null, formSaveFn = null, endTouched = false;
-    const habitFormState = () => JSON.stringify([formType, ...['hn', 'hc', 'hno', 'hdur', 'hts', 'hte', 'hfm'].map(i => { const e = $('#' + i); return e && e.value }), $('#hdt') && $('#hdt').dataset.k, $('#hend') && $('#hend').dataset.k, [...document.querySelectorAll('#hd [aria-pressed=true]')].map(b => b.dataset.d).join(), $('#hfc') && $('#hfc').checked]);
+    const habitFormState = () => JSON.stringify([formType, ...['hn', 'hc', 'hno', 'hdur', 'hts', 'hte'].map(i => { const e = $('#' + i); return e && e.value }), $('#hdt') && $('#hdt').dataset.k, $('#hend') && $('#hend').dataset.k, [...document.querySelectorAll('#hd [aria-pressed=true]')].map(b => b.dataset.d).join()]);
     const dirty = () => formSnapFn && formSnap !== null && formSnapFn() !== formSnap;
     function dismissModal() { if (dirty()) unsavedPrompt(); else closeModal() }
     function unsavedPrompt() {
@@ -880,54 +871,43 @@
     function formEnter(e) {
       if (e.key !== 'Enter' || !['INPUT', 'SELECT'].includes(e.target.tagName)) return;
       e.preventDefault();
-      const order = ['hn', 'hc', 'hdt', 'hts', 'hte', 'hfm', 'hdur', 'hend', 'hno'].filter(i => { const el = $('#' + i); return el && el.getClientRects().length }), i = order.indexOf(e.target.id);
+      const order = ['hn', 'hc', 'hdt', 'hts', 'hte', 'hdur', 'hend', 'hno'].filter(i => { const el = $('#' + i); return el && el.getClientRects().length }), i = order.indexOf(e.target.id);
       if (i >= 0 && i < order.length - 1) $('#' + order[i + 1]).focus()
     }
     function syncAll() { const all = [...document.querySelectorAll('#hd [data-d]')].every(x => x.getAttribute('aria-pressed') === 'true'), h = $('#hall'); if (h) h.textContent = all ? 'Clear all' : 'Select all' }
     function toggleAllDays() { const b = [...document.querySelectorAll('#hd [data-d]')], all = b.every(x => x.getAttribute('aria-pressed') === 'true'); b.forEach(x => x.setAttribute('aria-pressed', String(!all))); syncAll() }
-    /* ---------- planned focus sessions + reminders ---------- */
-    let activePlan = null;
+    /* ---------- time reminders (notifications only) ---------- */
     const REM = [30, 15, 10];
     const fmtT = v => new Date(2000, 0, 1, +v.slice(0, 2), +v.slice(3)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    const tmx = x => x.tStart ? ' · ' + fmtT(x.tStart) + (x.tEnd ? ' – ' + fmtT(x.tEnd) : '') + (x.focus ? ' · ' + MODES[x.fMode] + ' focus' : '') : '';
+    const tmx = x => x.tStart ? ' · ' + fmtT(x.tStart) + (x.tEnd ? ' – ' + fmtT(x.tEnd) : '') : '';
     const startMs = (k, t) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d, +t.slice(0, 2), +t.slice(3)).getTime() };
-    function setFocusUI() {
-      const c = $('#hfc'); if (!c) return; $('#hfopts').classList.toggle('hidden', !c.checked);
-      const e = $('#hfn'), N = window.Notification;
-      e.textContent = !$('#hts').value ? 'Set a start time above so we know when to remind you.' : !N ? 'This browser can’t show notifications. You’ll still see an in-app reminder while Be Discipline is open.' : N.permission === 'granted' ? 'Notifications are on. Keep Be Discipline open (a background tab is fine) to receive them.' : N.permission === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings. You’ll still see an in-app reminder while the app is open.' : 'Allow notifications when your browser asks.'
+    function setTimeUI() {
+      const e = $('#hfn'); if (!e) return; const N = window.Notification, hasT = !!($('#hts') && $('#hts').value);
+      e.textContent = !hasT ? 'Optional. Add a start time to get reminders 30, 15 and 10 minutes before.' : !N ? 'This browser can’t show notifications. You’ll still see an in-app reminder while Be Discipline is open.' : N.permission === 'granted' ? 'Notifications are on. Keep Be Discipline open (a background tab is fine) to receive reminders.' : N.permission === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings. You’ll still see an in-app reminder while the app is open.' : 'Allow notifications when your browser asks to get reminders before it starts.'
     }
-    function fToggle() {
+    function reqTimeNotif() {
       const N = window.Notification;
-      if ($('#hfc').checked && !$('#hts').value) $('#hts').focus();
-      if ($('#hfc').checked && N && N.permission === 'default') { try { N.requestPermission().then(setFocusUI) } catch (e) { } }
-      setFocusUI()
+      if ($('#hts') && $('#hts').value && N && N.permission === 'default') { try { N.requestPermission().then(setTimeUI) } catch (e) { } }
+      setTimeUI()
     }
-    function plannedOn(k) {
+    function timedOn(k) {
       const d = fromKey(k), out = [];
-      S.habits.forEach(h => { if (h.focus && h.tStart && sched(h, d)) out.push({ kind: 'habit', x: h, ok: done(h, d) }) });
-      S.tasks.forEach(t => { if (t.focus && t.tStart && t.date === k) out.push({ kind: 'task', x: t, ok: t.done }) });
-      return out.sort((a, b) => a.x.tStart < b.x.tStart ? -1 : a.x.tStart > b.x.tStart ? 1 : 0)
+      S.habits.forEach(h => { if (h.tStart && sched(h, d)) out.push({ kind: 'habit', x: h, ok: done(h, d) }) });
+      S.tasks.forEach(t => { if (t.tStart && t.date === k) out.push({ kind: 'task', x: t, ok: t.done }) });
+      return out
     }
-    function openPlanned(kind, id) {
-      const x = (kind === 'task' ? S.tasks : S.habits).find(y => y.id === id); if (!x) return;
-      activePlan = { name: x.name, kind, id, k: todayK }; view = 'study'; sub = x.fMode; closeModal(); closePop(); render(); toast(`${MODES[x.fMode]} ready. Press Start when you’re ready.`)
-    }
-    function plannedCard() {
-      const items = plannedOn(todayK); if (!items.length) return '';
-      return `<div class="mt-4 card card-border"><p class="text-xs font-bold uppercase tracking-widest opacity-50 mb-1">Planned today</p><ul class="divide-y divide-neutral-200 dark:divide-neutral-800">${items.map(({ kind, x, ok }) => `<li class="flex items-center gap-3 py-2.5"><div class="min-w-0 flex-1"><p class="text-sm font-semibold truncate ${ok ? 'line-through opacity-40' : ''}">${esc(x.name)}</p><p class="text-xs opacity-50 truncate">${fmtT(x.tStart)}${x.tEnd ? ' – ' + fmtT(x.tEnd) : ''} · ${MODES[x.fMode]}</p></div>${ok ? '' : `<button class="${btnP} !px-3 !py-1.5 !text-xs" onclick="openPlanned('${kind}','${x.id}')">Start</button>`}</li>`).join('')}</ul></div>`
-    }
-    function notify(title, body, kind, id) {
+    function notify(title, body, dk, id) {
       toast(title + '. ' + body, 'ok', 9000);
-      try { if (window.Notification && Notification.permission === 'granted') { const n = new Notification(title, { body, tag: id, icon: 'assets/icon.svg' }); n.onclick = () => { window.focus(); openPlanned(kind, id); n.close() } } } catch (e) { }
+      try { if (window.Notification && Notification.permission === 'granted') { const n = new Notification(title, { body, tag: id, icon: 'assets/icon.svg' }); n.onclick = () => { window.focus(); if (dk) { view = 'today'; viewK = dk; render() } n.close() } } } catch (e) { }
     }
     function checkReminders() {
       if (!S) return; const now = Date.now(), fired = (S.fired ??= {}), old = key(addDays(new Date(), -1)); let ch = false;
       for (const k in fired) if (k.split('|')[1] < old) { delete fired[k]; ch = true }
-      [key(new Date()), key(addDays(new Date(), 1))].forEach(dk => plannedOn(dk).forEach(({ kind, x, ok }) => {
+      [key(new Date()), key(addDays(new Date(), 1))].forEach(dk => timedOn(dk).forEach(({ x, ok }) => {
         const st = startMs(dk, x.tStart); if (ok || now >= st) return;
         const due = REM.filter(m => now >= st - m * 6e4 && !fired[`${x.id}|${dk}|${m}`]); if (!due.length) return;
         due.forEach(m => { fired[`${x.id}|${dk}|${m}`] = 1 }); ch = true;
-        notify(`Focus session in ${Math.max(1, Math.ceil((st - now) / 6e4))} min`, `${x.name} · ${fmtT(x.tStart)} · ${MODES[x.fMode]}`, kind, x.id)
+        notify(`Starts in ${Math.max(1, Math.ceil((st - now) / 6e4))} min`, `${x.name} · ${fmtT(x.tStart)}`, dk, x.id)
       }));
       if (ch) save()
     }
@@ -943,18 +923,18 @@
       if (S.prefs.tipsSeen) return;
       const li = (ic, t, d) => `<li class="flex items-start gap-3"><span class="w-9 h-9 rounded-xl bg-accent/10 text-accent dark:text-blue-400 flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-4 h-4"></i></span><span class="text-sm leading-snug"><b class="block">${t}</b><span class="opacity-70">${d}</span></span></li>`;
       pop(`<div class="flex items-center gap-3 mb-5"><span class="w-10 h-10 bg-[#15803d] text-white rounded-xl flex items-center justify-center shrink-0">${logo('w-5 h-5', 2.5)}</span><div><h2 class="text-lg font-bold leading-tight">Welcome to Be Discipline</h2><p class="text-xs opacity-60 mt-0.5">Three things to know</p></div></div>
-  <ul class="space-y-4 mb-6">${li('check-square', 'Tick it off', 'Tap the box next to a habit or task when you finish it. Habits build a streak.')}${li('plus', 'Add your own', 'Tap Add. A habit repeats on the days you choose. A task happens once.')}${li('target', 'Stay focused', 'The Focus tab has a timer, stopwatch and Pomodoro. Tick “Plan as a focus session” when adding something to get reminders.')}</ul>
+  <ul class="space-y-4 mb-6">${li('check-square', 'Tick it off', 'Tap the box next to a habit or task when you finish it. Habits build a streak.')}${li('plus', 'Add your own', 'Tap Add. A habit repeats on the days you choose. A task happens once.')}${li('target', 'Stay focused', 'The Focus tab has a timer, stopwatch and Pomodoro. Add a start time to any habit or task to get reminders.')}</ul>
   <button type="button" class="${btnP} w-full" onclick="finishWelcome()">Got it</button>${steps ? stepDots(2) : ''}`, true);
       const d = document.querySelector('#modal2 [role=dialog]'); if (d && steps) d.classList.add('slide-in')
     }
     function finishWelcome() { S.prefs.tipsSeen = true; save(); closePop() }
     function notifRow() {
       const N = window.Notification, p = N ? N.permission : 'none', b = 'px-4 py-2 text-xs font-semibold border border-neutral-300 dark:border-neutral-700 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800';
-      const [d, a] = p === 'none' ? ['Your browser doesn’t support notifications. You’ll still see in-app reminders while the app is open.', ''] : p === 'granted' ? ['On. You’ll be reminded 30, 15 and 10 minutes before planned focus sessions.', `<button class="${b}" onclick="testNotif()">Send test</button>`] : p === 'denied' ? ['Blocked. Allow notifications for this site in your browser settings to turn them on.', ''] : ['Get a reminder before your planned focus sessions start.', `<button class="px-4 py-2 text-xs font-semibold rounded-lg bg-accent text-white hover:opacity-90" onclick="askNotif()">Turn on</button>`];
+      const [d, a] = p === 'none' ? ['Your browser doesn’t support notifications. You’ll still see in-app reminders while the app is open.', ''] : p === 'granted' ? ['On. You’ll be reminded 30, 15 and 10 minutes before scheduled habits and tasks.', `<button class="${b}" onclick="testNotif()">Send test</button>`] : p === 'denied' ? ['Blocked. Allow notifications for this site in your browser settings to turn them on.', ''] : ['Get a reminder before scheduled habits and tasks start.', `<button class="px-4 py-2 text-xs font-semibold rounded-lg bg-accent text-white hover:opacity-90" onclick="askNotif()">Turn on</button>`];
       return `<div class="mb-8 card card-border flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="font-semibold text-sm">Reminders</p><p class="text-xs opacity-50 mt-0.5">${d}</p></div>${a ? `<div class="shrink-0">${a}</div>` : ''}</div>`
     }
     function askNotif() { try { Notification.requestPermission().then(() => render()) } catch (e) { } }
-    function testNotif() { notify('Test reminder', 'Notifications are working. You’ll get one like this before planned sessions.') }
+    function testNotif() { notify('Test reminder', 'Notifications are working. You’ll get one like this before scheduled habits and tasks.') }
     function formToggleHabit(id, resume) {
       const go = () => resume ? resumeHabit(id) : stopHabit(id);
       if (dirty()) confirmBox(resume ? 'Resume habit?' : 'Stop habit?', 'Unsaved changes in this form will be discarded.', go, resume ? 'Resume' : 'Stop habit', resume ? 'play' : 'pause');
@@ -1026,7 +1006,7 @@
       const [y, mo, da] = dv.split('-').map(Number), [hh, mm] = tv.split(':').map(Number), start = new Date(y, mo - 1, da, hh, mm).getTime();
       if (start > Date.now()) return toast('A session can’t start in the future.', 'err');
       x.name = $('#esn').value.trim() || defName(start); x.notes = $('#eso').value.trim(); x.mode = $('#esm').value; x.start = start; x.dur = dur; x.date = key(new Date(start));
-      anaK = x.date; save(); closeModal(); render(); toast('Session updated.')
+      save(); closeModal(); render(); toast('Session updated.')
     }
 
     /* ---------- views ---------- */
@@ -1091,15 +1071,22 @@
     }
     function clearSample() { S.habits = S.habits.filter(h => !h.sample); const ids = new Set(S.habits.map(h => h.id)); for (const k in S.logs) { S.logs[k] = S.logs[k].filter(x => ids.has(x)); if (!S.logs[k].length) delete S.logs[k] } S.sampleActive = false; save(); render(); toast('Sample data cleared.') }
     function statsView() {
-      let best = 0, tot = 0, sch = 0; S.habits.forEach(h => { const x = history(h); best = Math.max(best, x.best); tot += x.done; sch += x.total });
+      let best = 0, tot = 0, sch = 0;
+      S.habits.forEach(h => { const x = history(h); best = Math.max(best, x.best); tot += x.done; sch += x.total });
+      const pastTasks = S.tasks.filter(t => t.date <= todayK);
+      sch += pastTasks.length;
+      tot += pastTasks.filter(t => t.done).length;
       const rate = sch ? Math.round(tot / sch * 100) : 0, cells = [];
       const end = fromKey(todayK), rng = [3, 6].includes(S.prefs.range) ? S.prefs.range : 3;
       let start = new Date(end); start.setMonth(start.getMonth() - rng); start = addDays(start, 1); start = addDays(start, -start.getDay());
       for (let d = start; key(d) <= todayK; d = addDays(d, 1)) {
-        const sc = S.habits.filter(h => sched(h, d)); const dn = sc.filter(h => done(h, d)).length; const r = sc.length ? dn / sc.length : 0;
+        const dk = key(d), scH = S.habits.filter(h => sched(h, d)), scT = S.tasks.filter(t => t.date === dk);
+        const scLen = scH.length + scT.length;
+        const dn = scH.filter(h => done(h, d)).length + scT.filter(t => t.done).length;
+        const r = scLen ? dn / scLen : 0;
         const lv = dn === 0 ? 0 : r <= .25 ? 1 : r <= .5 ? 2 : r <= .75 ? 3 : 4;
         const ds = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-        const tip = sc.length ? `<b>${dn} of ${sc.length} task${sc.length === 1 ? '' : 's'} completed</b>${ds}` : `<b>No tasks scheduled</b>${ds}`;
+        const tip = scLen ? `<b>${dn} of ${scLen} item${scLen === 1 ? '' : 's'} completed</b>${ds}` : `<b>No habits or tasks scheduled</b>${ds}`;
         cells.push(`<div class="cell lv${lv}" data-tip="${tip.replace(/"/g, '&quot;')}"></div>`)
       }
       const cols = Math.ceil(cells.length / 7), gap = rng === 3 ? 4 : 3;
@@ -1109,7 +1096,7 @@
       const m = (v, l) => `<div class="text-center py-3 sm:py-4"><p class="text-3xl sm:text-4xl font-bold tracking-tight">${v}</p><p class="text-xs sm:text-sm opacity-50 mt-0.5">${l}</p></div>`;
       const rangeBtn = n => `<button onclick="S.prefs.range=${n};save();render()" aria-pressed="${rng === n}" class="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-full border transition-colors ${rng === n ? 'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100' : 'border-neutral-300 dark:border-neutral-700 opacity-60 hover:opacity-100'}">${n}M</button>`;
       return `<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Insights</h1>
-  <p class="text-xs opacity-60 mt-1">Your progress across all habits. Darker squares mean more habits done that day.</p>
+  <p class="text-xs opacity-60 mt-1">Your progress across all habits and tasks. Darker squares mean more completed that day.</p>
   <div class="grid grid-cols-3 gap-2 mt-4 card card-border">
     ${m(best + '<span class="text-base sm:text-xl font-semibold"> days</span>', 'Best streak')}
     <div class="border-x border-neutral-200 dark:border-neutral-800">
@@ -1124,8 +1111,8 @@
     <div class="heat-months" style="--cols:${cols};--gap:${gap}px">${months}</div>
     <div class="heat" style="--cols:${cols};--gap:${gap}px" aria-label="Daily completion heatmap">${cells.join('')}</div>
   </div>
-  <div class="flex items-center justify-end gap-1.5 mt-3 text-xs opacity-70"><span>Less</span>${[['No tasks completed', 0], ['1–25% of tasks', 1], ['26–50%', 2], ['51–75%', 3], ['76–100%', 4]].map(([t, l]) => `<div class="cell lv${l}" style="width:12px;aspect-ratio:1" tabindex="0" data-tip="<b>Level ${l}</b>${t}"></div>`).join('')}<span>More</span></div>
-  ${studyStats()}`
+  <div class="flex items-center justify-end gap-1.5 mt-3 text-xs opacity-70"><span>Less</span>${[['Nothing completed', 0], ['1–25% completed', 1], ['26–50%', 2], ['51–75%', 3], ['76–100%', 4]].map(([t, l]) => `<div class="cell lv${l}" style="width:12px;aspect-ratio:1" tabindex="0" data-tip="<b>Level ${l}</b>${t}"></div>`).join('')}<span>More</span></div>
+  ${focusedSessionsView()}`
     }
     function settingsView() {
       if (setSub) return settingsSub();
@@ -1211,8 +1198,8 @@
     function normalize(o) {
       o.cats = Array.isArray(o.cats) ? o.cats.filter(c => c && typeof c.name === 'string' && c.name.trim()).map(c => ({ name: c.name.trim(), color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#8a8a8a' })) : DEFCATS.map(([name, color]) => ({ name, color }));
       o.habits.forEach(h => { if (h.cat && !o.cats.some(c => c.name === h.cat)) o.cats.push({ name: h.cat, color: '#8a8a8a' }) });
-      o.habits.forEach(h => { if (!/^\d{4}-\d{2}-\d{2}$/.test(h.until)) h.until = ''; h.tStart = tmOk(h.tStart); h.tEnd = tmOk(h.tEnd); h.focus = !!h.focus && !!h.tStart; if (!FMODES.includes(h.fMode)) h.fMode = 'pomodoro' });
-      o.tasks = (Array.isArray(o.tasks) ? o.tasks : []).filter(t => t && typeof t.id === 'string' && typeof t.name === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date)).map(t => ({ id: t.id, name: t.name, cat: t.cat || '', date: t.date, notes: t.notes || '', done: !!t.done, tStart: tmOk(t.tStart), tEnd: tmOk(t.tEnd), focus: !!t.focus && !!tmOk(t.tStart), fMode: FMODES.includes(t.fMode) ? t.fMode : 'pomodoro' }));
+      o.habits.forEach(h => { if (!/^\d{4}-\d{2}-\d{2}$/.test(h.until)) h.until = ''; h.tStart = tmOk(h.tStart); h.tEnd = tmOk(h.tEnd) });
+      o.tasks = (Array.isArray(o.tasks) ? o.tasks : []).filter(t => t && typeof t.id === 'string' && typeof t.name === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.date)).map(t => ({ id: t.id, name: t.name, cat: t.cat || '', date: t.date, notes: t.notes || '', done: !!t.done, tStart: tmOk(t.tStart), tEnd: tmOk(t.tEnd) }));
       o.tasks.forEach(t => { if (t.cat && !o.cats.some(c => c.name === t.cat)) o.cats.push({ name: t.cat, color: '#8a8a8a' }) });
       o.sessions = (Array.isArray(o.sessions) ? o.sessions : []).filter(x => x && typeof x.id === 'string' && Number.isFinite(x.dur) && x.dur > 0 && Number.isFinite(x.start) && ['timer', 'stopwatch', 'pomodoro'].includes(x.mode)).map(x => ({ id: x.id, name: String(x.name || 'Study session'), notes: String(x.notes || ''), start: x.start, dur: x.dur, mode: x.mode, date: /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? x.date : key(new Date(x.start)) }));
       o.fired = o.fired && typeof o.fired === 'object' && !Array.isArray(o.fired) ? o.fired : {};
@@ -1347,53 +1334,45 @@
   <label class="block text-sm font-medium mb-1" for="sno">Notes (optional)</label>
   <textarea id="sno" rows="3" placeholder="What did you study?" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600"></textarea>
   <div class="flex gap-2 justify-end"><button class="${btn}" onclick="discardSession()">Discard</button><button class="${btnP}" onclick="saveSession()">Save session</button></div>`, true);
-      if (activePlan) $('#sn').value = activePlan.name;
       $('#sn').focus()
     }
     function saveSession() {
-      const p = pending; if (!p) return; pending = null; const plan = activePlan; activePlan = null;
+      const p = pending; if (!p) return; pending = null;
       S.sessions.push({ id: uid(), name: $('#sn').value.trim() || defName(p.began), notes: $('#sno').value.trim(), start: p.began, dur: p.sec, mode: p.mode, date: key(new Date(p.began)) });
-      let msg = 'Session saved.';
-      if (plan) {
-        const x = (plan.kind === 'task' ? S.tasks : S.habits).find(y => y.id === plan.id);
-        if (x) { if (plan.kind === 'task') x.done = true; else { const l = (S.logs[plan.k] ??= []); if (!l.includes(x.id)) l.push(x.id) } msg = `Session saved. “${x.name}” marked as done.` }
-      }
-      anaK = key(new Date(p.began)); save(); closePop(); if (p.after) p.after(); toast(msg)
+      save(); closePop(); if (p.after) p.after(); toast('Session saved.')
     }
-    function discardSession() { const p = pending; pending = null; activePlan = null; closePop(); if (p && p.after) p.after(); toast('Session discarded.') }
+    function discardSession() { const p = pending; pending = null; closePop(); if (p && p.after) p.after(); toast('Session discarded.') }
     const none = () => toast('Nothing to save yet. Start first.', 'err');
     function timerStop() { const t = TM().timer, el = t.dur - remain(t); if (el < 1) return none(); t.left = remain(t); t.run = false; save(); askSave('timer', el, t.began, resetTimer) }
     function swStop() { const w = TM().sw, el = (w.run ? Date.now() - w.start : w.el) / 1000; if (el < 1) return none(); w.el = Math.round(el * 1000); w.run = false; save(); askSave('stopwatch', el, w.began, swReset) }
     function pomoStop() { const P = TM().pomo; if (!P.began && !P.acc) return none(); if (curMode(P) === 'focus' && !P.fin) P.acc += Math.max(0, stepSecs(P) - remain(P)); P.run = false; save(); askSave('pomodoro', P.acc, P.began, pomoRestart) }
-    function anaGo(n) { anaK = key(addDays(fromKey(anaK), n)); render() }
-    function setPie(v) { pieBy = v; render() }
-    function delSession(id) { const x = S.sessions.find(y => y.id === id); if (x) confirmBox('Delete session?', `“${x.name}” (${fmtDur(x.dur)}) will be permanently removed.`, () => { S.sessions = S.sessions.filter(y => y.id !== id); save(); render(); toast('Session deleted.') }) }
-    function studyStats() {
-      const day = S.sessions.filter(x => x.date === anaK).sort((a, b) => a.start - b.start), total = day.reduce((a, x) => a + x.dur, 0), byM = pieBy === 'method', g = {};
-      day.forEach(x => { const k = byM ? x.mode : x.name; (g[k] ??= { k, dur: 0 }).dur += x.dur });
-      const items = Object.values(g).sort((a, b) => b.dur - a.dur).map((x, i) => ({ ...x, label: byM ? MODES[x.k] : x.k, color: byM ? MCOL[x.k] : PALETTE[i % PALETTE.length], pct: x.dur / total * 100 }));
-      let cum = 0;
-      const slices = items.map(it => {
-        const tip = esc(`<b>${esc(it.label)}</b>${fmtDur(it.dur)}, ${Math.round(it.pct)}%`);
-        const c = `<circle cx="16" cy="16" r="8" fill="none" stroke="${it.color}" stroke-width="16" pathLength="100" stroke-dasharray="${it.pct} ${100 - it.pct}" stroke-dashoffset="${-cum}" transform="rotate(-90 16 16)" data-tip="${tip}"/>`; cum += it.pct; return c
-      }).join('');
-      const nb = 'shrink-0 w-9 h-9 rounded-xl border border-neutral-300 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors';
-      const seg = (v, l) => `<button onclick="setPie('${v}')" aria-pressed="${pieBy === v}" class="px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${pieBy === v ? 'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100' : 'border-neutral-300 dark:border-neutral-700 opacity-60 hover:opacity-100'}">${l}</button>`;
-      return `<h2 class="mt-10 text-xl sm:text-2xl font-bold tracking-tight">Focus time</h2>
-  <div class="flex items-center gap-2.5 mt-4">
-    <button onclick="anaGo(-1)" aria-label="Previous day" class="${nb}"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-    <div class="flex-1 text-center"><p class="font-bold text-sm">${relLabel(anaK)}</p><p class="text-xs opacity-50">${total ? fmtDur(total) + ' focused' : 'No focus time logged'}</p></div>
-    <button onclick="anaGo(1)" aria-label="Next day" class="${nb}"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
-  <div class="flex items-center justify-center gap-3 mt-2.5 text-xs font-semibold">${anaK === todayK ? '' : `<button class="text-accent dark:text-blue-400 hover:underline" onclick="anaK=todayK;render()">↩ Today</button>`}<button class="flex items-center gap-1 opacity-50 hover:opacity-80" onclick="openCal(anaK,k=>{anaK=k;render()})"><i data-lucide="calendar" class="w-3.5 h-3.5"></i>&nbsp;Pick date</button></div>
-  <div class="flex justify-center gap-2 mt-4" role="group" aria-label="Group the chart">${seg('method', 'By method')}${seg('session', 'By session')}</div>
-  <div class="mt-5 flex flex-col sm:flex-row items-center justify-center gap-6">
-    <svg viewBox="0 0 32 32" class="w-36 h-36 sm:w-44 sm:h-44 shrink-0" role="img" aria-label="Focus time split">${items.length ? slices : '<circle cx="16" cy="16" r="16" fill="rgba(127,127,127,.18)"/>'}</svg>
-    ${items.length ? `<ul class="w-full space-y-2">${items.map(it => `<li class="flex items-center gap-2.5 text-sm"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${it.color}"></span><span class="flex-1 truncate">${esc(it.label)}</span><span class="font-bold">${fmtDur(it.dur)}</span><span class="opacity-40 text-xs w-9 text-right">${Math.round(it.pct)}%</span></li>`).join('')}</ul>` : ''}</div>
-  ${day.length ? `<ul class="mt-5 card card-border divide-y divide-neutral-200 dark:divide-neutral-800">${day.map(x => `<li class="flex items-start gap-3 py-3.5 px-1">
-    <span class="mt-1 w-2 h-2 rounded-full shrink-0" style="background:${MCOL[x.mode]}"></span>
-    <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate">${esc(x.name)}</p><p class="text-xs opacity-50">${MODES[x.mode]} · ${clock(x.start)}</p>${x.notes ? `<p class="text-xs mt-1 opacity-70 whitespace-pre-line break-words">${esc(x.notes)}</p>` : ''}</div>
-    <span class="font-bold text-sm whitespace-nowrap">${fmtDur(x.dur)}</span><button onclick="sessionForm('${x.id}')" aria-label="Edit session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button onclick="delSession('${x.id}')" aria-label="Delete session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')}</ul>`
-          : `<p class="mt-5 py-6 text-sm opacity-50 text-center">No sessions today. Use the 'Focus' tab to log time.</p>`}`
+    function toggleSession(id) { openSessionId = openSessionId === id ? null : id; render() }
+    function delSession(id) { const x = S.sessions.find(y => y.id === id); if (x) confirmBox('Delete session?', `“${x.name}” (${fmtDur(x.dur)}) will be permanently removed.`, () => { S.sessions = S.sessions.filter(y => y.id !== id); if (openSessionId === id) openSessionId = null; save(); render(); toast('Session deleted.') }) }
+    function focusedSessionsView() {
+      const all = [...S.sessions].sort((a, b) => b.start - a.start);
+      return `<section class="mt-10" aria-label="Focused Sessions">
+  <div class="flex items-baseline justify-between mb-3">
+    <h2 class="text-xl sm:text-2xl font-bold tracking-tight">Focused Sessions</h2>
+    <span class="text-xs font-medium opacity-50">${all.length} session${all.length === 1 ? '' : 's'}</span>
+  </div>
+  ${all.length ? `<ul class="card card-border divide-y divide-neutral-200 dark:divide-neutral-800">${all.map(x => {
+        const open = openSessionId === x.id;
+        return `<li class="py-2.5 px-1">
+    <button type="button" onclick="toggleSession('${x.id}')" aria-expanded="${open}" class="w-full flex items-center justify-between gap-3 py-1 text-left">
+      <span class="font-semibold text-sm truncate">${esc(x.name)}</span>
+      <i data-lucide="${open ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 opacity-40 shrink-0"></i>
+    </button>
+    ${open ? `<div class="mt-2 pt-2 border-t border-neutral-200/70 dark:border-neutral-800/70">
+      <p class="text-xs opacity-50 mb-1.5">${MODES[x.mode]} · ${fmtDur(x.dur)} · ${shortDate(x.date)} at ${clock(x.start)}</p>
+      <p class="text-sm ${x.notes ? 'opacity-80 whitespace-pre-line break-words' : 'opacity-40 italic'}">${x.notes ? esc(x.notes) : 'No notes.'}</p>
+      <div class="flex items-center gap-2 mt-3">
+        <button type="button" onclick="sessionForm('${x.id}')" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 inline-flex items-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Edit</button>
+        <button type="button" onclick="delSession('${x.id}')" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-900 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 inline-flex items-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Delete</button>
+      </div>
+    </div>` : ''}
+  </li>`
+      }).join('')}</ul>` : `<p class="mt-2 py-6 text-sm opacity-50 text-center card card-border">No focused sessions yet. Use the Focus tab to log a session.</p>`}
+</section>`
     }
 
     function studyView() {
@@ -1442,7 +1421,6 @@
       }
       return `<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Focus</h1>
   <p class="text-xs opacity-60 mt-1">Run a timer, stopwatch or Pomodoro, then save the session to track your focus time.</p>
-  ${plannedCard()}
   <div class="flex gap-1 mt-4 bg-neutral-100 dark:bg-neutral-900 rounded-xl p-1">${subs.map(([id, l]) => `<button onclick="sub='${id}';render()" class="flex-1 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-colors ${sub === id ? 'bg-white dark:bg-neutral-800 shadow-sm' : 'opacity-50 hover:opacity-80'}">${l}</button>`).join('')}</div>
   <div class="mt-5">${sub === 'pomodoro' ? body : `<div class="card card-border px-5 pb-6 pt-1">${body}</div>`}</div>`
     }
@@ -1476,8 +1454,8 @@
     })();
     S = normalize(load()); save(); applyTheme(); render(); checkAppPopup(); setInterval(tick, 250); setInterval(checkReminders, 15000); checkReminders();
     // Midnight rollover: re-render when the local date changes.
-    setInterval(() => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } }, 30000);
-    document.addEventListener('visibilitychange', () => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; if (anaK === todayK) anaK = k; todayK = k; render() } });
+    setInterval(() => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; todayK = k; render() } }, 30000);
+    document.addEventListener('visibilitychange', () => { const k = key(new Date()); if (k !== todayK) { if (viewK === todayK) viewK = k; todayK = k; render() } });
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => { });
     }
