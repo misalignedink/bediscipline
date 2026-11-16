@@ -1080,7 +1080,7 @@
     <span class="mt-1 w-2 h-2 rounded-full shrink-0" style="background:${MCOL[x.mode]}"></span>
     <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate">${esc(x.name)}</p><p class="text-xs opacity-50">${MODES[x.mode]} · ${clock(x.start)}</p>${x.notes ? `<p class="text-xs mt-1 opacity-70 whitespace-pre-line break-words">${esc(x.notes)}</p>` : ''}</div>
     <span class="font-bold text-sm whitespace-nowrap">${fmtDur(x.dur)}</span><button onclick="delSession('${x.id}')" aria-label="Delete session" class="p-1.5 rounded-lg opacity-30 hover:opacity-80 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></li>`).join('')}</ul>`
-          : `<p class="mt-5 py-6 text-sm opacity-50 text-center">No sessions today. Use the Study tab to log time.</p>`}`
+          : `<p class="mt-5 py-6 text-sm opacity-50 text-center">No sessions today. Use the 'Focus' tab to log time.</p>`}`
     }
 
     function studyView() {
