@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Be Discipline</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#2f3bff">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['"Instrument Sans"','system-ui','sans-serif']},colors:{accent:'#2f3bff'}}}}</script>
+<style>
+body{font-family:'Instrument Sans',system-ui,sans-serif;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+:focus-visible{outline:2px solid #2f3bff;outline-offset:2px}
+.dark input,.dark select,.dark textarea{color-scheme:dark}
+.heat{display:grid;grid-template-columns:repeat(var(--cols),1fr);grid-template-rows:repeat(7,auto);grid-auto-flow:column;gap:var(--gap)}
+.heat-months{display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:var(--gap);font-size:11px;opacity:.65;margin-bottom:4px;height:14px}
+.heat-months span{white-space:nowrap;overflow:visible}
+.heat .cell{border-radius:2px}
+.cell{aspect-ratio:1;border-radius:3px;background:rgba(127,127,127,.18);outline-offset:1px}
+.cell[data-tip]:hover{outline:1px solid rgba(127,127,127,.7)}
+.lv1{background:#d6f5de}.lv2{background:#8fdca4}.lv3{background:#3fb868}.lv4{background:#17713b}
+#tip{position:fixed;z-index:60;pointer-events:none;padding:6px 10px;font-size:12px;line-height:1.35;background:#0a0a0a;color:#fff;border:1px solid #444;white-space:nowrap;display:none}
+#tip b{display:block;font-size:13px}
+.author{position:relative;display:inline-flex;align-items:center;gap:4px;font-weight:600;color:#2f3bff;text-decoration:none;background:linear-gradient(currentColor,currentColor) 0 100%/0 2px no-repeat;transition:background-size .3s ease}
+.dark .author{color:#8b93ff}
+.author:hover,.author:focus-visible{background-size:100% 2px}
+.author svg{transition:transform .25s ease}
+.author:hover svg,.author:focus-visible svg{transform:translate(2px,-2px)}
+.author .hint{position:absolute;right:0;bottom:calc(100% + 10px);padding:5px 10px;font-size:11px;font-weight:600;white-space:nowrap;background:#2f3bff;color:#fff;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.author .hint::after{content:'';position:absolute;right:16px;top:100%;border:5px solid transparent;border-top-color:#2f3bff}
+.author:hover .hint,.author:focus-visible .hint{opacity:1;animation:nudge 1.1s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.author .hint{animation:none!important}}
+</style>
+</head>
+<body class="bg-stone-50 text-neutral-950 dark:bg-neutral-950 dark:text-stone-100 min-h-screen">
+<div id="app" class="max-w-2xl mx-auto px-4 pb-24"></div>
+<div id="modal"></div>
+<div id="modal2"></div>
+<div id="tip" role="tooltip"></div>
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"></div>
+<script>
+const APP_VERSION='0.0.1', KEY='be-discipline-v1', DEFCATS=[['Health','#16a34a'],['Study','#2f3bff'],['Work','#f59e0b'],['Mindset','#a855f7']], PALETTE=['#16a34a','#2f3bff','#f59e0b','#a855f7','#ef4444','#06b6d4','#ec4899','#64748b'], DAYS=['S','M','T','W','T','F','S'];
+const $=s=>document.querySelector(s);
+const logo=(c,w=2)=>`<svg class="${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const key=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const fromKey=k=>{const[y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const uid=()=>Math.random().toString(36).slice(2,10);
+let S, view='today', filter='All', todayK=key(new Date()), viewK=todayK, formType='habit', anaK=todayK, pieBy='method';
+
+/* ---------- storage ---------- */
+function seed(){
+  const t=new Date(), defs=[['Morning workout','Health',[1,3,5],'30 min, no phone'],['Read 20 pages','Study',[],''],['Deep work block','Work',[1,2,3,4,5],'90 min, one task'],['Meditate','Mindset',[],'']];
+  const habits=defs.map(([name,cat,days,notes])=>({id:uid(),name,cat,days,notes,created:key(addDays(t,-24)),sample:true}));
+  const logs={};
+  for(let i=24;i>=1;i--){const d=addDays(t,-i);habits.forEach((h,j)=>{
+    if((!h.days.length||h.days.includes(d.getDay()))&&((i*7+j*13)%10)<7)(logs[key(d)]??=[]).push(h.id)})}
+  return{v:1,habits,logs,prefs:{theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'},sampleActive:true};
+}
+function valid(o){return o&&typeof o==='object'&&Array.isArray(o.habits)&&o.logs&&typeof o.logs==='object'&&!Array.isArray(o.logs)&&o.prefs&&typeof o.prefs==='object'
+  &&o.habits.every(h=>h&&typeof h.id==='string'&&typeof h.name==='string'&&Array.isArray(h.days)&&typeof h.created==='string')
+  &&Object.values(o.logs).every(Array.isArray)&&(o.tasks===undefined||Array.isArray(o.tasks))&&(o.sessions===undefined||Array.isArray(o.sessions))}
+function load(){try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);if(valid(o))return o}else return seed()}catch(e){}
+  toast('Saved data was unreadable and has been reset.','err');return{v:1,habits:[],logs:{},prefs:{theme:'light'},sampleActive:false}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save: browser storage is full or blocked.','err')}}
+
+/* ---------- logic ---------- */
+const sched=(h,d)=>key(d)>=h.created&&(!h.days.length||h.days.includes(d.getDay()));
+const done=(h,d)=>(S.logs[key(d)]||[]).includes(h.id);
+function streak(h,endK=todayK){let d=fromKey(endK<todayK?endK:todayK),n=0;
+  if(sched(h,d)&&!done(h,d))d=addDays(d,-1);
+  for(let i=0;i<4000&&key(d)>=h.created;i++,d=addDays(d,-1)){if(!sched(h,d))continue;if(done(h,d))n++;else break}return n}
+function history(h){ // chronological rows with running streak
+  const rows=[];let cur=0,best=0,done_=0,total=0;
+  for(let d=fromKey(h.created);key(d)<=todayK;d=addDays(d,1)){
+    if(!sched(h,d))continue;const ok=done(h,d);total++;
+    if(ok){cur++;done_++;best=Math.max(best,cur)}else if(key(d)!==todayK)cur=0;
+    rows.push({date:key(d),ok,streak:ok?cur:0})}
+  return{rows,best,done:done_,total}}
+function toggle(id){if(viewK>todayK)return toast('You can tick this off once the day arrives.','err');const l=(S.logs[viewK]??=[]);const i=l.indexOf(id);i<0?l.push(id):l.splice(i,1);if(!l.length)delete S.logs[viewK];save();render()}
+function toggleTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;if(t.date>todayK)return toast('You can tick this off once the day arrives.','err');t.done=!t.done;save();render()}
+function delHabit(id){const h=S.habits.find(x=>x.id===id);if(h)confirmBox('Delete habit?',`“${h.name}” and all of its history will be permanently removed.`,()=>{removeHabit(id);toast('Habit deleted.')})}
+function delTask(id){const t=S.tasks.find(x=>x.id===id);if(t)confirmBox('Delete task?',`“${t.name}” will be permanently removed.`,()=>{S.tasks=S.tasks.filter(x=>x.id!==id);save();render();toast('Task deleted.')})}
+function toast(msg,type='ok'){const t=$('#toast');t.innerHTML=`<div class="px-4 py-2.5 text-sm font-medium shadow-lg ${type==='err'?'bg-red-600 text-white':'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950'}">${esc(msg)}</div>`;clearTimeout(toast.t);toast.t=setTimeout(()=>t.innerHTML='',3500)}
+function applyTheme(){document.documentElement.classList.toggle('dark',S.prefs.theme==='dark')}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+/* ---------- modal ---------- */
+const btn='px-4 py-2.5 text-sm font-semibold border border-neutral-950 dark:border-stone-100 hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
+const btnP='px-4 py-2.5 text-sm font-semibold bg-accent text-white hover:opacity-90';
+function modal(html){$('#modal').innerHTML=`<div class="fixed inset-0 z-40 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this)closeModal()"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-md p-6 max-h-[90vh] overflow-auto">${html}</div></div>`;lucide.createIcons()}
+function closeModal(){$('#modal').innerHTML=''}
+/* ---------- in-app popups: confirm + calendar ---------- */
+let popCb=null,cal=null,popSticky=false;
+function pop(html,sticky=false){popSticky=sticky;$('#modal2').innerHTML=`<div class="fixed inset-0 z-[45] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="${sticky?'':'if(event.target===this)closePop()'}"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-sm p-6 max-h-[90vh] overflow-auto">${html}</div></div>`;lucide.createIcons()}
+function closePop(){$('#modal2').innerHTML='';popCb=null;cal=null;popSticky=false}
+function confirmBox(title,body,action,label='Delete'){popCb=action;
+  pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-red-600 text-white flex items-center justify-center shrink-0"><i data-lucide="trash-2" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">${esc(title)}</h2></div>
+  <p class="text-sm mb-6">${esc(body)}</p>
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closePop()">Cancel</button><button class="px-4 py-2.5 text-sm font-semibold bg-red-600 text-white hover:bg-red-700" onclick="runPop()">${esc(label)}</button></div>`)}
+function runPop(){const f=popCb;closePop();if(f)f()}
+function openCal(initK,cb){const d=fromKey(initK);cal={y:d.getFullYear(),m:d.getMonth(),sel:initK,cb};drawCal()}
+function calMove(m,y=0){const d=new Date(cal.y+y,cal.m+m,1);cal.y=d.getFullYear();cal.m=d.getMonth();drawCal()}
+function calPick(k){const cb=cal.cb;closePop();cb(k)}
+function drawCal(){
+  const start=new Date(cal.y,cal.m,1).getDay(),n=new Date(cal.y,cal.m+1,0).getDate();
+  const title=new Date(cal.y,cal.m,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const nb='w-9 h-9 border border-neutral-400 dark:border-neutral-600 flex items-center justify-center hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
+  let cells='';for(let i=0;i<start;i++)cells+='<span></span>';
+  for(let d=1;d<=n;d++){const k=`${cal.y}-${pad(cal.m+1)}-${pad(d)}`,sel=k===cal.sel,td=k===todayK,tk=S.tasks.some(t=>t.date===k)||S.sessions.some(x=>x.date===k);
+    cells+=`<button onclick="calPick('${k}')" aria-label="${shortDate(k)}" ${sel?'aria-current="date"':''} class="relative aspect-square text-sm font-medium ${sel?'bg-accent text-white':'hover:bg-neutral-200 dark:hover:bg-neutral-800'} ${td&&!sel?'ring-1 ring-inset ring-accent':''}">${d}${tk?'<span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-current opacity-70"></span>':''}</button>`}
+  pop(`<div class="flex items-center justify-between gap-1 mb-4">
+    <div class="flex gap-1"><button onclick="calMove(0,-1)" aria-label="Previous year" class="${nb}"><i data-lucide="chevrons-left" class="w-4 h-4"></i></button><button onclick="calMove(-1)" aria-label="Previous month" class="${nb}"><i data-lucide="chevron-left" class="w-4 h-4"></i></button></div>
+    <p class="font-semibold text-center">${title}</p>
+    <div class="flex gap-1"><button onclick="calMove(1)" aria-label="Next month" class="${nb}"><i data-lucide="chevron-right" class="w-4 h-4"></i></button><button onclick="calMove(0,1)" aria-label="Next year" class="${nb}"><i data-lucide="chevrons-right" class="w-4 h-4"></i></button></div></div>
+  <div class="grid grid-cols-7 gap-1 text-center text-xs opacity-60 mb-1">${DAYS.map(d=>`<span>${d}</span>`).join('')}</div>
+  <div class="grid grid-cols-7 gap-1">${cells}</div>
+  <div class="flex items-center justify-between mt-5"><button class="text-sm font-semibold underline" onclick="calPick('${todayK}')">Today</button><button class="${btn}" onclick="closePop()">Cancel</button></div>`)}
+function setFormDate(k){const b=$('#hdt');b.dataset.k=k;$('#hdtl').textContent=shortDate(k)}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#modal2').innerHTML){if(!popSticky)closePop()}else closeModal()}});
+
+function habitForm(type='habit'){
+  const inp='w-full mb-4 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600';
+  modal(`<h2 id="ft" class="text-xl font-bold mb-4">New habit</h2>
+  <div class="flex mb-3" role="group" aria-label="What are you adding?">${[['habit','Habit'],['task','Task']].map(([t,l])=>`<button type="button" data-t="${t}" onclick="setType('${t}')" class="flex-1 px-4 py-2 text-sm font-semibold border -ml-px first:ml-0">${l}</button>`).join('')}</div>
+  <p id="fhelp" class="text-xs opacity-60 mb-5"></p>
+  <label class="block text-sm font-medium mb-1" for="hn">Name</label>
+  <input id="hn" maxlength="60" class="${inp}">
+  <label class="block text-sm font-medium mb-1" for="hc">Category</label>
+  <select id="hc" class="w-full mb-4 px-3 py-2.5 bg-stone-50 dark:bg-neutral-900 border border-neutral-400 dark:border-neutral-600">${catOptions()}</select>
+  <label id="datel" class="block text-sm font-medium mb-1" for="hdt">Starts on</label>
+  <button type="button" id="hdt" data-k="${viewK}" onclick="openCal(this.dataset.k,setFormDate)" class="${inp} flex items-center justify-between text-left"><span id="hdtl">${shortDate(viewK)}</span><i data-lucide="calendar" class="w-4 h-4 opacity-60"></i></button>
+  <div id="rep"><p class="text-sm font-medium mb-1">Repeat</p>
+  <div class="flex gap-1.5 mb-1" id="hd">${DAYS.map((d,i)=>`<button type="button" data-d="${i}" aria-pressed="false" class="w-10 h-10 text-sm font-semibold border border-neutral-400 dark:border-neutral-600 aria-pressed:bg-accent aria-pressed:text-white aria-pressed:border-accent" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true')">${d}</button>`).join('')}</div>
+  <p class="text-xs opacity-60 mb-4">Leave all unselected for every day.</p></div>
+  <label class="block text-sm font-medium mb-1" for="hno">Notes (optional)</label>
+  <textarea id="hno" rows="2" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600"></textarea>
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closeModal()">Cancel</button><button id="fb" class="${btnP}" onclick="addItem()">Add habit</button></div>`);
+  setType(type);$('#hn').focus()}
+function setType(t){formType=t;const task=t==='task';
+  document.querySelectorAll('[data-t]').forEach(b=>{const on=b.dataset.t===t;b.className='flex-1 px-4 py-2 text-sm font-semibold border -ml-px first:ml-0 '+(on?'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100':'border-neutral-400 dark:border-neutral-600');b.setAttribute('aria-pressed',on)});
+  $('#ft').textContent=task?'New task':'New habit';$('#fb').textContent=task?'Add task':'Add habit';
+  $('#datel').textContent=task?'Date':'Starts on';$('#rep').style.display=task?'none':'';
+  $('#fhelp').textContent=task?'A task happens once, on the date you pick.':'A habit repeats and builds a streak from its start date.';
+  $('#hn').placeholder=task?'e.g. Submit the assignment':'e.g. Write for 30 minutes'}
+function addItem(){const name=$('#hn').value.trim();if(!name){$('#hn').focus();return toast('Enter a name.','err')}
+  const date=/^\d{4}-\d{2}-\d{2}$/.test($('#hdt').dataset.k)?$('#hdt').dataset.k:viewK,cat=$('#hc').value,notes=$('#hno').value.trim();
+  if(formType==='task')S.tasks.push({id:uid(),name,cat,date,notes,done:false});
+  else{const days=[...document.querySelectorAll('#hd [aria-pressed=true]')].map(b=>+b.dataset.d);
+    S.habits.push({id:uid(),name,cat,days:days.length===7?[]:days,notes,created:date})}
+  viewK=date;view='today';save();closeModal();render();toast(formType==='task'?'Task added.':'Habit added.')}
+function removeHabit(id){S.habits=S.habits.filter(h=>h.id!==id);for(const k in S.logs){S.logs[k]=S.logs[k].filter(x=>x!==id);if(!S.logs[k].length)delete S.logs[k]}save();render()}
+
+/* ---------- views ---------- */
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const shortDate=k=>{const d=fromKey(k);return `${d.getDate()} ${MON[d.getMonth()]}, ${d.getFullYear()}`};
+const dayDiff=k=>Math.round((fromKey(k)-fromKey(todayK))/864e5);
+const relLabel=k=>{const n=dayDiff(k);return n===0?'Today':n===1?'Tomorrow':n===-1?'Yesterday':shortDate(k)};
+function goDay(n){viewK=key(addDays(fromKey(viewK),n));render()}
+function goToday(){viewK=todayK;render()}
+function todayView(){
+  const vd=fromKey(viewK),future=viewK>todayK,isToday=viewK===todayK,n=dayDiff(viewK);
+  const habits=S.habits.filter(h=>sched(h,vd)),tasks=S.tasks.filter(t=>t.date===viewK);
+  const inCat=x=>filter==='All'||x.cat===filter,fh=habits.filter(inCat),ft=tasks.filter(inCat);
+  const hd=habits.filter(h=>done(h,vd)).length,td=tasks.filter(t=>t.done).length;
+  const total=habits.length+tasks.length,dn=hd+td,pct=total?Math.round(dn/total*100):0;
+  const dt=vd.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+  const sub=Math.abs(n)<=1?relLabel(viewK):`${n>0?`In ${n} days`:`${-n} days ago`}, ${shortDate(viewK)}`;
+  const nb='shrink-0 w-10 h-10 border border-neutral-400 dark:border-neutral-600 flex items-center justify-center hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
+  const ul='mt-2 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800';
+  const empty=t=>`<p class="mt-2 py-5 text-sm opacity-60 border-y border-neutral-300 dark:border-neutral-800">${t}</p>`;
+  const cnt=(a,b)=>future?`${b} planned`:`${a} of ${b} done`;
+  const head=(t,a,b)=>`<div class="mt-8 flex items-baseline justify-between"><h2 class="font-semibold">${t}</h2><span class="text-xs opacity-60">${cnt(a,b)}</span></div>`;
+  const meta=(x,extra)=>`<p class="text-xs opacity-60 truncate">${dot(catColor(x.cat))}${esc(x.cat||'Uncategorized')}${extra||''}${x.notes?' · '+esc(x.notes):''}</p>`;
+  const box=(d,fn,name)=>`<button onclick="${fn}" aria-label="${d?'Mark not done':'Mark done'}: ${esc(name)}" aria-pressed="${d}" class="shrink-0 w-8 h-8 border-2 flex items-center justify-center ${d?'bg-accent border-accent text-white':'border-neutral-500'} ${future?'opacity-40':''}">${d?'<i data-lucide="check" class="w-5 h-5"></i>':''}</button>`;
+  const delBtn=(fn,label)=>`<button onclick="${fn}" aria-label="${label}" class="opacity-40 hover:opacity-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+  return `${S.sampleActive?`<div class="mb-6 p-3 border border-dashed border-neutral-500 flex items-center justify-between gap-3 text-sm"><span>You're viewing sample habits.</span><button class="font-semibold underline" onclick="clearSample()">Clear sample data</button></div>`:''}
+  <div class="flex items-center gap-3">
+    <button onclick="goDay(-1)" aria-label="Previous day" class="${nb}"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+    <div class="flex-1 min-w-0 text-center"><h1 class="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">${dt}</h1><p class="text-sm opacity-60 mt-0.5">${sub}</p></div>
+    <button onclick="goDay(1)" aria-label="Next day" class="${nb}"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+  </div>
+  <div class="relative mt-3 flex items-center justify-center gap-5 text-sm font-semibold">
+    ${isToday?'':`<button onclick="goToday()" class="underline">Back to today</button>`}
+    <button onclick="openCal(viewK,k=>{viewK=k;render()})" class="flex items-center gap-1.5 hover:underline"><i data-lucide="calendar" class="w-4 h-4"></i>Pick a date</button>
+  </div>
+  <div class="mt-6 flex items-baseline justify-between text-sm"><span>${future?`${total} planned`:`${dn} of ${total} done`}${isToday?' today':''}</span><span class="font-semibold">${future?'':pct+'%'}</span></div>
+  <div class="h-2 mt-1.5 bg-neutral-300 dark:bg-neutral-800" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="h-full bg-accent transition-all" style="width:${pct}%"></div></div>
+  <div class="mt-6 flex gap-2 overflow-x-auto pb-1">${chips()}</div>
+  ${head('Habits',hd,habits.length)}
+  ${fh.length?`<ul class="${ul}">${fh.map(h=>{const d=done(h,vd),st=streak(h,viewK);return `<li class="flex items-center gap-4 py-4">${box(d,`toggle('${h.id}')`,h.name)}
+    <div class="min-w-0 flex-1"><p class="font-semibold truncate ${d?'line-through opacity-50':''}">${esc(h.name)}</p>${meta(h,h.days.length?' · '+h.days.map(i=>DN[i]).join(', '):'')}</div>
+    <span class="text-sm font-semibold whitespace-nowrap flex items-center gap-1 ${st?'text-accent dark:text-blue-400':'opacity-40'}"><i data-lucide="flame" class="w-4 h-4"></i>${st}-day streak</span>${delBtn(`delHabit('${h.id}')`,'Delete habit')}</li>`}).join('')}</ul>`:empty(habits.length?'No habits in this category.':'No habits scheduled for this day.')}
+  ${head('Tasks',td,tasks.length)}
+  ${ft.length?`<ul class="${ul}">${ft.map(t=>`<li class="flex items-center gap-4 py-4">${box(t.done,`toggleTask('${t.id}')`,t.name)}
+    <div class="min-w-0 flex-1"><p class="font-semibold truncate ${t.done?'line-through opacity-50':''}">${esc(t.name)}</p>${meta(t)}</div>${delBtn(`delTask('${t.id}')`,'Delete task')}</li>`).join('')}</ul>`:empty(tasks.length?'No tasks in this category.':'No tasks for this day. Use Add to create a one-off task.')}
+  ${S.habits.length+S.tasks.length?'':'<p class="text-sm opacity-60 text-center mt-8">Add a habit to build a streak, or a task for a single day.</p>'}
+  <button onclick="habitForm()" class="${btnP} fixed bottom-6 right-6 shadow-lg flex items-center gap-2" style="margin-bottom:env(safe-area-inset-bottom)"><i data-lucide="plus" class="w-4 h-4"></i>Add</button>`}
+function clearSample(){S.habits=S.habits.filter(h=>!h.sample);const ids=new Set(S.habits.map(h=>h.id));for(const k in S.logs){S.logs[k]=S.logs[k].filter(x=>ids.has(x));if(!S.logs[k].length)delete S.logs[k]}S.sampleActive=false;save();render();toast('Sample data cleared.')}
+function statsView(){
+  let best=0,tot=0,sch=0;S.habits.forEach(h=>{const x=history(h);best=Math.max(best,x.best);tot+=x.done;sch+=x.total});
+  const rate=sch?Math.round(tot/sch*100):0, cells=[];
+  const end=fromKey(todayK), rng=[3,6,12].includes(S.prefs.range)?S.prefs.range:3;
+  let start=new Date(end);start.setMonth(start.getMonth()-rng);start=addDays(start,1);start=addDays(start,-start.getDay());
+  for(let d=start;key(d)<=todayK;d=addDays(d,1)){
+    const sc=S.habits.filter(h=>sched(h,d));const dn=sc.filter(h=>done(h,d)).length;const r=sc.length?dn/sc.length:0;
+    const lv=dn===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4;
+    const ds=d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+    const tip=sc.length?`<b>${dn} of ${sc.length} task${sc.length===1?'':'s'} completed</b>${ds}`:`<b>No tasks scheduled</b>${ds}`;
+    cells.push(`<div class="cell lv${lv}" data-tip="${tip.replace(/"/g,'&quot;')}"></div>`)}
+  const cols=Math.ceil(cells.length/7), gap=rng===3?4:rng===6?3:2;
+  let labs=[],pm=-1;for(let c=0;c<cols;c++){const d=addDays(start,c*7);if(d.getMonth()!==pm){labs.push([c,d.toLocaleDateString(undefined,{month:'short'})]);pm=d.getMonth()}}
+  if(labs.length>1&&labs[1][0]<3)labs.shift();
+  const months=labs.map(([c,l])=>`<span style="grid-column-start:${c+1}">${l}</span>`).join('');
+  const m=(v,l)=>`<div class="py-4"><p class="text-4xl font-bold tracking-tight">${v}</p><p class="text-sm opacity-60">${l}</p></div>`;
+  return `<h1 class="text-3xl font-bold tracking-tight">Consistency</h1>
+  <div class="grid grid-cols-3 gap-4 mt-4 border-y border-neutral-300 dark:border-neutral-800 divide-x divide-neutral-300 dark:divide-neutral-800">${m(best+'<span class="text-lg font-semibold"> days</span>','Best streak')}${m(tot,'Total completions')}${m(rate+'%','Completion rate')}</div>
+  <div class="flex items-center justify-between mt-8 mb-3"><h2 class="font-semibold">Last ${rng} months</h2>
+  <div class="flex" role="group" aria-label="Heatmap range">${[3,6,12].map(n=>`<button onclick="S.prefs.range=${n};save();render()" aria-pressed="${rng===n}" class="px-3 py-1 text-sm font-medium border -ml-px first:ml-0 ${rng===n?'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100':'border-neutral-400 dark:border-neutral-600'}">${n}M</button>`).join('')}</div></div>
+  <div class="heat-wrap"><div class="heat-months" style="--cols:${cols};--gap:${gap}px">${months}</div>
+  <div class="heat" style="--cols:${cols};--gap:${gap}px" aria-label="Daily completion heatmap">${cells.join('')}</div></div>
+  <div class="flex items-center justify-end gap-1.5 mt-3 text-xs opacity-80"><span>Less</span>${[['No tasks completed',0],['1–25% of the day\'s tasks',1],['26–50%',2],['51–75%',3],['76–100%',4]].map(([t,l])=>`<div class="cell lv${l}" style="width:14px;aspect-ratio:1" tabindex="0" data-tip="<b>Level ${l}</b>${t}"></div>`).join('')}<span>More</span></div>${studyStats()}`}
+function settingsView(){
+  const row=(t,d,b)=>`<div class="py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="font-semibold">${t}</p><p class="text-sm opacity-60">${d}</p></div>${b}</div>`;
+  return `<h1 class="text-3xl font-bold tracking-tight">Settings</h1>
+  ${catsView()}
+  <h2 class="font-semibold mt-10">Data</h2>
+  <div class="mt-4 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800">
+  ${row('Backup','Save all habits, history and settings to a file.',`<button class="${btn}" onclick="backup()">Download Backup (.json)</button>`)}
+  ${row('Restore','Replace current data with a backup file.',`<button class="${btn}" onclick="$('#file').click()">Restore from Backup (.json)</button><input id="file" type="file" accept=".json,application/json" class="hidden" onchange="restore(this)">`)}
+  ${row('Export','Spreadsheet-friendly history of every scheduled day.',`<button class="${btn}" onclick="exportCSV()">Export History (.csv)</button>`)}
+  ${row('Erase','Permanently delete everything stored on this device.',`<button class="px-4 py-2.5 text-sm font-semibold bg-red-600 text-white hover:bg-red-700" onclick="eraseStep1()">Erase All Data</button>`)}
+  </div><p class="text-xs opacity-60 mt-4">All data stays in this browser. Nothing is sent anywhere.</p>
+  <section class="mt-12 border border-neutral-300 dark:border-neutral-800" aria-label="About Be Discipline">
+    <div class="h-1.5 bg-[#15803d]"></div>
+    <div class="p-6">
+      <div class="flex items-center gap-4">
+        <span class="w-14 h-14 bg-[#15803d] text-white flex items-center justify-center shrink-0">${logo('w-8 h-8',3)}</span>
+        <div class="min-w-0"><p class="text-2xl font-bold tracking-tight leading-tight">Be Discipline</p><p class="text-sm opacity-60">Build habits. Stay consistent.</p></div>
+      </div>
+      <dl class="mt-6 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800">
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2.5 opacity-60"><i data-lucide="tag" class="w-4 h-4"></i>Version</dt><dd class="font-semibold text-right">${APP_VERSION}</dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2.5 opacity-60"><i data-lucide="user" class="w-4 h-4"></i>Built by</dt><dd class="text-right"><a class="author" href="https://misalignedink.github.io" target="_blank" rel="noopener noreferrer">Sayak Majumder<i data-lucide="arrow-up-right" class="w-4 h-4"></i><span class="hint">Click to visit Sayak’s website</span></a></dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2.5 opacity-60"><i data-lucide="sparkles" class="w-4 h-4"></i>Made with</dt><dd class="font-semibold text-right">Vibe coding</dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2.5 opacity-60"><i data-lucide="hard-drive" class="w-4 h-4"></i>Your data</dt><dd class="font-semibold text-right">Stays on this device</dd></div>
+        <div class="flex items-center justify-between gap-4 py-3 text-sm"><dt class="flex items-center gap-2.5 opacity-60"><i data-lucide="wifi-off" class="w-4 h-4"></i>Works offline</dt><dd class="font-semibold text-right">Yes</dd></div>
+      </dl>
+      <p class="text-xs opacity-60 mt-5">&copy; ${new Date().getFullYear()} Sayak Majumder. All rights reserved.</p>
+    </div>
+  </section>`}
+
+/* ---------- data management ---------- */
+const stamp=()=>key(new Date());
+function backup(){download(`be-discipline-backup-${stamp()}.json`,JSON.stringify(S,null,2),'application/json');toast('Backup downloaded.')}
+function restore(input){const f=input.files[0];input.value='';if(!f)return;
+  const r=new FileReader();r.onerror=()=>toast('Could not read that file.','err');
+  r.onload=()=>{let o;try{o=JSON.parse(r.result)}catch(e){return toast('Restore failed: file is not valid JSON.','err')}
+    if(!valid(o))return toast('Restore failed: file does not match Be Discipline backup format.','err');
+    window._pending=o;
+    modal(`<h2 class="text-xl font-bold mb-2">Restore this backup?</h2><p class="text-sm mb-5">This replaces your current data with ${o.habits.length} habit${o.habits.length===1?'':'s'} and ${Object.keys(o.logs).length} logged day${Object.keys(o.logs).length===1?'':'s'} from “${esc(f.name)}”.</p>
+    <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closeModal()">Cancel</button><button class="${btnP}" onclick="doRestore()">Replace my data</button></div>`)};
+  r.readAsText(f)}
+function doRestore(){S=normalize(window._pending);S.prefs.theme=S.prefs.theme==='dark'?'dark':'light';S.sampleActive=!!S.sampleActive;save();applyTheme();closeModal();render();toast('Backup restored.')}
+function exportCSV(){
+  const q=v=>`"${String(v).replace(/"/g,'""')}"`,out=[];
+  S.habits.forEach(h=>history(h).rows.forEach(r=>out.push([r.date,h.name,h.cat||'Uncategorized',r.ok?'Completed':'Missed',r.streak])));
+  S.tasks.filter(t=>t.date<=todayK).forEach(t=>out.push([t.date,t.name,t.cat||'Uncategorized',t.done?'Completed':'Missed','']));
+  if(!out.length)return toast('Nothing to export yet. Add a habit first.','err');
+  out.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+  download(`be-discipline-export-${stamp()}.csv`,'\ufeff'+['Date','Habit Name','Category','Status (Completed/Missed)','Current Streak'].join(',')+'\n'+out.map(r=>r.map(q).join(',')).join('\n'),'text/csv');
+  toast('CSV exported.')}
+function eraseStep1(){modal(`<h2 class="text-xl font-bold mb-2 text-red-600">Erase all data?</h2><p class="text-sm mb-5">Every habit, check-in and setting on this device will be deleted. Download a backup first if you might want it back.</p>
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closeModal()">Keep my data</button><button class="px-4 py-2.5 text-sm font-semibold bg-red-600 text-white" onclick="eraseStep2()">Continue</button></div>`)}
+function eraseStep2(){modal(`<h2 class="text-xl font-bold mb-2 text-red-600">Type DELETE to confirm</h2><input id="del" autocomplete="off" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400" oninput="$('#delb').disabled=this.value!=='DELETE'" placeholder="DELETE">
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closeModal()">Cancel</button><button id="delb" disabled class="px-4 py-2.5 text-sm font-semibold bg-red-600 text-white disabled:opacity-40" onclick="doErase()">Erase All Data</button></div>`);$('#del').focus()}
+function doErase(){try{Object.keys(localStorage).filter(k=>k.startsWith('be-discipline')).forEach(k=>localStorage.removeItem(k))}catch(e){}
+  S=normalize({v:1,habits:[],logs:{},prefs:{theme:'light'},sampleActive:false});save();applyTheme();closeModal();view='today';filter='All';render();toast('All data erased.')}
+
+/* ---------- categories ---------- */
+function normalize(o){
+  o.cats=Array.isArray(o.cats)?o.cats.filter(c=>c&&typeof c.name==='string'&&c.name.trim()).map(c=>({name:c.name.trim(),color:/^#[0-9a-f]{6}$/i.test(c.color)?c.color:'#8a8a8a'})):DEFCATS.map(([name,color])=>({name,color}));
+  o.habits.forEach(h=>{if(h.cat&&!o.cats.some(c=>c.name===h.cat))o.cats.push({name:h.cat,color:'#8a8a8a'})});
+  o.tasks=(Array.isArray(o.tasks)?o.tasks:[]).filter(t=>t&&typeof t.id==='string'&&typeof t.name==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)).map(t=>({id:t.id,name:t.name,cat:t.cat||'',date:t.date,notes:t.notes||'',done:!!t.done}));
+  o.tasks.forEach(t=>{if(t.cat&&!o.cats.some(c=>c.name===t.cat))o.cats.push({name:t.cat,color:'#8a8a8a'})});
+  o.sessions=(Array.isArray(o.sessions)?o.sessions:[]).filter(x=>x&&typeof x.id==='string'&&Number.isFinite(x.dur)&&x.dur>0&&Number.isFinite(x.start)&&['timer','stopwatch','pomodoro'].includes(x.mode)).map(x=>({id:x.id,name:String(x.name||'Study session'),notes:String(x.notes||''),start:x.start,dur:x.dur,mode:x.mode,date:/^\d{4}-\d{2}-\d{2}$/.test(x.date)?x.date:key(new Date(x.start))}));
+  return o}
+const catColor=n=>(S.cats.find(c=>c.name===n)||{}).color||'#8a8a8a';
+const catCount=n=>S.habits.filter(h=>h.cat===n).length+S.tasks.filter(t=>t.cat===n).length;
+const dot=c=>`<span class="inline-block w-2 h-2 rounded-full mr-1.5" style="background:${c}"></span>`;
+function setFilter(f){filter=f;render()}
+function chips(){const names=['All',...S.cats.map(c=>c.name),...(S.habits.some(h=>!h.cat)||S.tasks.some(t=>!t.cat)?['']:[])];
+  if(!names.includes(filter))filter='All';
+  return names.map(n=>`<button data-f="${esc(n)}" onclick="setFilter(this.dataset.f)" class="shrink-0 px-3 py-1.5 text-sm font-medium border ${filter===n?'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100':'border-neutral-400 dark:border-neutral-600'}">${n==='All'?'All':dot(n===''?'#8a8a8a':catColor(n))+esc(n||'Uncategorized')}</button>`).join('')}
+function catOptions(){return S.cats.length?S.cats.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join(''):'<option value="">Uncategorized</option>'}
+const catTaken=(n,except=-1)=>S.cats.some((c,i)=>i!==except&&c.name.toLowerCase()===n.toLowerCase());
+function addCat(){const n=$('#nc').value.trim();if(!n){$('#nc').focus();return toast('Enter a category name.','err')}
+  if(catTaken(n))return toast('That category already exists.','err');
+  S.cats.push({name:n,color:$('#ncc').value});save();render();toast('Category added.')}
+function renameCat(i,v){v=v.trim();const old=S.cats[i].name;
+  if(!v){toast('Category name can’t be empty.','err');return render()}
+  if(catTaken(v,i)){toast('That category already exists.','err');return render()}
+  if(v===old)return;S.habits.forEach(h=>{if(h.cat===old)h.cat=v});S.tasks.forEach(t=>{if(t.cat===old)t.cat=v});if(filter===old)filter=v;S.cats[i].name=v;save();render();toast('Category renamed.')}
+function recolorCat(i,v){S.cats[i].color=v;save();render()}
+function deleteCat(i){const c=S.cats[i],n=catCount(c.name);
+  confirmBox('Delete category?',`“${c.name}” will be removed.${n?` Its ${n} item${n===1?'':'s'} will become Uncategorized.`:''}`,()=>{
+    S.habits.forEach(h=>{if(h.cat===c.name)h.cat=''});S.tasks.forEach(t=>{if(t.cat===c.name)t.cat=''});S.cats.splice(i,1);save();render();toast('Category deleted.')})}
+function catsView(){
+  const inp='bg-transparent border border-neutral-400 dark:border-neutral-600';
+  return `<section class="mt-6 mb-10"><h2 class="font-semibold">Categories</h2><p class="text-sm opacity-60">Rename, recolor or remove the categories used for habits.</p>
+  <ul class="mt-3 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800">
+  ${S.cats.map((c,i)=>`<li class="flex items-center gap-3 py-3"><input type="color" value="${c.color}" onchange="recolorCat(${i},this.value)" aria-label="Color for ${esc(c.name)}" class="w-9 h-9 p-0 border-0 bg-transparent cursor-pointer shrink-0">
+    <input value="${esc(c.name)}" maxlength="24" onchange="renameCat(${i},this.value)" aria-label="Category name" class="flex-1 min-w-0 px-3 py-2 ${inp}">
+    <span class="text-xs opacity-60 whitespace-nowrap">${catCount(c.name)} item${catCount(c.name)===1?'':'s'}</span>
+    <button onclick="deleteCat(${i})" aria-label="Delete ${esc(c.name)}" class="opacity-40 hover:opacity-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('')||'<li class="py-4 text-sm opacity-60">No categories yet. Add one below.</li>'}
+  </ul>
+  <div class="flex items-center gap-3 mt-4"><input id="ncc" type="color" value="${PALETTE[S.cats.length%PALETTE.length]}" aria-label="New category color" class="w-9 h-9 p-0 border-0 bg-transparent cursor-pointer shrink-0">
+    <input id="nc" maxlength="24" placeholder="New category name" onkeydown="if(event.key==='Enter')addCat()" class="flex-1 min-w-0 px-3 py-2 ${inp}"><button class="${btn} shrink-0" onclick="addCat()">Add category</button></div>
+  <div class="flex gap-2 mt-3" aria-label="Color presets">${PALETTE.map(c=>`<button type="button" onclick="$('#ncc').value='${c}'" aria-label="Use ${c}" class="w-6 h-6 rounded-full border border-black/10" style="background:${c}"></button>`).join('')}</div></section>`}
+
+/* ---------- study tools ---------- */
+let sub='pomodoro', ac;
+const TM=()=>{const t=(S.timers??={});
+  t.timer??={dur:600,run:false,end:0,left:600};
+  t.pomo??={idx:0,run:false,end:0,left:1500,cfg:{},done:0,day:todayK,fin:false};
+  const P=t.pomo,D={focus:25,short:5,long:15,sessions:4,longEvery:2,auto:true};delete P.mode;
+  for(const k in D)P.cfg[k]??=D[k];P.idx??=0;P.fin??=false;P.acc??=0;P.began??=0;
+  t.sw??={run:false,start:0,el:0,laps:[]};
+  if(t.pomo.day!==todayK){t.pomo.day=todayK;t.pomo.done=0}return t};
+const fmt=s=>{s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+':'+pad(m):pad(m))+':'+pad(s%60)};
+const fmtMs=ms=>{const c=Math.floor(ms/10)%100;return fmt(ms/1000)+'.'+pad(c)};
+const remain=o=>o.run?Math.max(0,Math.ceil((o.end-Date.now())/1000)):o.left;
+function beep(){try{ac??=new AudioContext();[0,.3,.6].forEach(d=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+d);o.stop(ac.currentTime+d+.18)})}catch(e){}}
+function unlockAudio(){try{ac??=new AudioContext();ac.resume()}catch(e){}}
+function startStop(o,secsFn){unlockAudio();if(o.run){o.left=remain(o);o.run=false}else{if(o.left<=0)o.left=secsFn();if(!o.began)o.began=Date.now();o.run=true;o.end=Date.now()+o.left*1000}save();render()}
+function setTimerDur(min){const t=TM().timer;min=Math.min(999,Math.max(1,Math.round(+min||0)));t.dur=min*60;t.left=t.dur;t.run=false;t.began=0;save();render()}
+function resetTimer(){const t=TM().timer;t.run=false;t.left=t.dur;t.began=0;save();render()}
+const buildPlan=c=>{const p=[];for(let i=1;i<=c.sessions;i++){p.push('focus');if(i<c.sessions)p.push(c.longEvery>0&&i%c.longEvery===0?'long':'short')}return p};
+const curMode=P=>{const pl=buildPlan(P.cfg);return pl[Math.min(P.idx,pl.length-1)]};
+const stepSecs=P=>P.cfg[curMode(P)]*60;
+function pomoCfg(k,v){const P=TM().pomo,lim={focus:[1,180],short:[1,180],long:[1,180],sessions:[1,20],longEvery:[0,20]}[k];
+  v=Math.round(+v);if(isNaN(v))return render();P.cfg[k]=Math.min(lim[1],Math.max(lim[0],v));
+  if(P.fin)P.idx=0;P.idx=Math.min(P.idx,buildPlan(P.cfg).length-1);P.fin=false;P.run=false;P.left=stepSecs(P);save();render()}
+function pomoAuto(v){TM().pomo.cfg.auto=v;save()}
+function pomoReset(){const P=TM().pomo;P.run=false;P.left=stepSecs(P);save();render()}
+function pomoRestart(){const P=TM().pomo;P.acc=0;P.began=0;P.idx=0;P.fin=false;P.run=false;P.left=stepSecs(P);save();render()}
+function pomoNext(finished){const P=TM().pomo,plan=buildPlan(P.cfg);
+  if(plan[P.idx]==='focus')P.acc+=finished?P.cfg.focus*60:Math.max(0,stepSecs(P)-remain(P));
+  if(finished&&plan[P.idx]==='focus')P.done++;
+  if(P.idx>=plan.length-1){P.fin=true;P.run=false;P.left=0;save();render();askSave('pomodoro',P.acc,P.began,pomoRestart);return}
+  P.idx++;P.left=stepSecs(P);P.run=false;
+  if(finished&&P.cfg.auto){P.run=true;P.end=Date.now()+P.left*1000}
+  save();render()}
+function swToggle(){const w=TM().sw;unlockAudio();if(w.run){w.el=Date.now()-w.start;w.run=false}else{if(!w.el)w.began=Date.now();w.start=Date.now()-w.el;w.run=true}save();render()}
+function swLap(){const w=TM().sw;if(!w.run)return;w.laps.push(Date.now()-w.start);save();render()}
+function swReset(){const w=TM().sw;w.run=false;w.el=0;w.laps=[];w.began=0;save();render()}
+function tick(){const t=TM(),set=(id,v)=>{const e=document.getElementById(id);if(e&&e.textContent!==v)e.textContent=v};
+  const tm=t.timer,tr=remain(tm);
+  if(tm.run&&tr<=0){tm.run=false;tm.left=0;save();beep();render();askSave('timer',tm.dur,tm.began,resetTimer)}
+  set('tm-timer',fmt(tr));
+  const P=t.pomo,pr=remain(P);
+  if(P.run&&!P.fin&&pr<=0){const pl=buildPlan(P.cfg),m=pl[P.idx],last=P.idx>=pl.length-1;beep();toast(last?'All sessions complete. Well done.':m==='focus'?'Focus session complete. Break time.':'Break over. Back to focus.');pomoNext(true);return}
+  set('tm-pomo',fmt(pr));
+  const bar=document.getElementById('pomo-bar');if(bar)bar.style.width=(P.fin?100:100-pr/stepSecs(P)*100)+'%';
+  const sg=document.getElementById('pomo-seg');if(sg)sg.style.width=(P.fin?100:100-pr/stepSecs(P)*100)+'%';
+  const w=t.sw;set('tm-sw',fmtMs(w.run?Date.now()-w.start:w.el));
+  document.title=P.run?`${fmt(pr)} · ${curMode(P)==='focus'?'Focus':'Break'}`:tm.run?`${fmt(tr)} · Timer`:'Be Discipline'}
+/* ---------- saved study sessions ---------- */
+const MODES={timer:'Timer',stopwatch:'Stopwatch',pomodoro:'Pomodoro'},MCOL={pomodoro:'#15803d',stopwatch:'#2f3bff',timer:'#f59e0b'};
+const defName=ms=>{const h=new Date(ms).getHours();return(h>=5&&h<12?'Morning':h>=12&&h<17?'Afternoon':h>=17&&h<21?'Evening':'Night')+' session'};
+const fmtDur=x=>{x=Math.round(x);const h=Math.floor(x/3600),m=Math.floor(x%3600/60);return h?`${h}h ${m}m`:m>=10?`${m}m`:m?`${m}m ${x%60}s`:`${x}s`};
+const clock=ms=>new Date(ms).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+let pending=null;
+function askSave(mode,sec,began,after){sec=Math.round(sec);
+  if(sec<1){if(after)after();return}
+  began=began||Date.now()-sec*1000;pending={mode,sec,began,after};
+  pop(`<h2 class="text-xl font-bold mb-1">Save this session?</h2>
+  <p class="text-sm opacity-60 mb-5">${MODES[mode]}, ${fmtDur(sec)}, started ${clock(began)}</p>
+  <label class="block text-sm font-medium mb-1" for="sn">Session name</label>
+  <input id="sn" maxlength="40" placeholder="${defName(began)}" class="w-full mb-4 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600">
+  <label class="block text-sm font-medium mb-1" for="sno">Notes (optional)</label>
+  <textarea id="sno" rows="3" placeholder="What did you study?" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600"></textarea>
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="discardSession()">Discard</button><button class="${btnP}" onclick="saveSession()">Save session</button></div>`,true);
+  $('#sn').focus()}
+function saveSession(){const p=pending;if(!p)return;pending=null;
+  S.sessions.push({id:uid(),name:$('#sn').value.trim()||defName(p.began),notes:$('#sno').value.trim(),start:p.began,dur:p.sec,mode:p.mode,date:key(new Date(p.began))});
+  anaK=key(new Date(p.began));save();closePop();if(p.after)p.after();toast('Session saved.')}
+function discardSession(){const p=pending;pending=null;closePop();if(p&&p.after)p.after();toast('Session discarded.')}
+const none=()=>toast('Nothing to save yet. Start first.','err');
+function timerStop(){const t=TM().timer,el=t.dur-remain(t);if(el<1)return none();t.left=remain(t);t.run=false;save();askSave('timer',el,t.began,resetTimer)}
+function swStop(){const w=TM().sw,el=(w.run?Date.now()-w.start:w.el)/1000;if(el<1)return none();w.el=Math.round(el*1000);w.run=false;save();askSave('stopwatch',el,w.began,swReset)}
+function pomoStop(){const P=TM().pomo;if(!P.began&&!P.acc)return none();if(curMode(P)==='focus'&&!P.fin)P.acc+=Math.max(0,stepSecs(P)-remain(P));P.run=false;save();askSave('pomodoro',P.acc,P.began,pomoRestart)}
+function anaGo(n){anaK=key(addDays(fromKey(anaK),n));render()}
+function setPie(v){pieBy=v;render()}
+function delSession(id){const x=S.sessions.find(y=>y.id===id);if(x)confirmBox('Delete session?',`“${x.name}” (${fmtDur(x.dur)}) will be permanently removed.`,()=>{S.sessions=S.sessions.filter(y=>y.id!==id);save();render();toast('Session deleted.')})}
+function studyStats(){
+  const day=S.sessions.filter(x=>x.date===anaK).sort((a,b)=>a.start-b.start),total=day.reduce((a,x)=>a+x.dur,0),byM=pieBy==='method',g={};
+  day.forEach(x=>{const k=byM?x.mode:x.name;(g[k]??={k,dur:0}).dur+=x.dur});
+  const items=Object.values(g).sort((a,b)=>b.dur-a.dur).map((x,i)=>({...x,label:byM?MODES[x.k]:x.k,color:byM?MCOL[x.k]:PALETTE[i%PALETTE.length],pct:x.dur/total*100}));
+  let cum=0;
+  const slices=items.map(it=>{const tip=esc(`<b>${esc(it.label)}</b>${fmtDur(it.dur)}, ${Math.round(it.pct)}%`);
+    const c=`<circle cx="16" cy="16" r="8" fill="none" stroke="${it.color}" stroke-width="16" pathLength="100" stroke-dasharray="${it.pct} ${100-it.pct}" stroke-dashoffset="${-cum}" transform="rotate(-90 16 16)" data-tip="${tip}"/>`;cum+=it.pct;return c}).join('');
+  const nb='shrink-0 w-10 h-10 border border-neutral-400 dark:border-neutral-600 flex items-center justify-center hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
+  const seg=(v,l)=>`<button onclick="setPie('${v}')" aria-pressed="${pieBy===v}" class="px-3 py-1 text-sm font-medium border -ml-px first:ml-0 ${pieBy===v?'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100':'border-neutral-400 dark:border-neutral-600'}">${l}</button>`;
+  return `<h2 class="mt-12 text-2xl font-bold tracking-tight">Study time</h2>
+  <div class="flex items-center gap-3 mt-4">
+    <button onclick="anaGo(-1)" aria-label="Previous day" class="${nb}"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+    <div class="flex-1 text-center"><p class="font-semibold">${relLabel(anaK)}</p><p class="text-sm opacity-60">${total?fmtDur(total)+' studied':'No study logged'}</p></div>
+    <button onclick="anaGo(1)" aria-label="Next day" class="${nb}"><i data-lucide="chevron-right" class="w-5 h-5"></i></button></div>
+  <div class="mt-3 flex items-center justify-center gap-5 text-sm font-semibold">${anaK===todayK?'':`<button class="underline" onclick="anaK=todayK;render()">Back to today</button>`}<button class="flex items-center gap-1.5 hover:underline" onclick="openCal(anaK,k=>{anaK=k;render()})"><i data-lucide="calendar" class="w-4 h-4"></i>Pick a date</button></div>
+  <div class="flex justify-center mt-5" role="group" aria-label="Group the chart">${seg('method','By method')}${seg('session','By session')}</div>
+  <div class="mt-6 flex flex-col sm:flex-row items-center justify-center gap-8">
+    <svg viewBox="0 0 32 32" class="w-44 h-44 shrink-0" role="img" aria-label="Study time split">${items.length?slices:'<circle cx="16" cy="16" r="16" fill="rgba(127,127,127,.18)"/>'}</svg>
+    ${items.length?`<ul class="w-full sm:w-auto sm:min-w-[14rem] space-y-2">${items.map(it=>`<li class="flex items-center gap-3 text-sm"><span class="w-3 h-3 shrink-0" style="background:${it.color}"></span><span class="flex-1 truncate">${esc(it.label)}</span><span class="font-semibold">${fmtDur(it.dur)}</span><span class="opacity-60 w-10 text-right">${Math.round(it.pct)}%</span></li>`).join('')}</ul>`:''}</div>
+  ${day.length?`<ul class="mt-6 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800">${day.map(x=>`<li class="flex items-start gap-4 py-4"><span class="mt-1.5 w-2.5 h-2.5 shrink-0" style="background:${MCOL[x.mode]}"></span>
+    <div class="min-w-0 flex-1"><p class="font-semibold truncate">${esc(x.name)}</p><p class="text-xs opacity-60">${MODES[x.mode]}, ${clock(x.start)}</p>${x.notes?`<p class="text-sm mt-1 opacity-80 whitespace-pre-line break-words">${esc(x.notes)}</p>`:''}</div>
+    <span class="font-semibold whitespace-nowrap">${fmtDur(x.dur)}</span><button onclick="delSession('${x.id}')" aria-label="Delete session" class="opacity-40 hover:opacity-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button></li>`).join('')}</ul>`
+  :`<p class="mt-6 py-5 text-sm opacity-60 border-y border-neutral-300 dark:border-neutral-800">No sessions on this day. Use the Timer, Stopwatch or Pomodoro in the Study tab, then save the session when you stop.</p>`}`}
+
+function studyView(){
+  const t=TM(),subs=[['pomodoro','Pomodoro'],['timer','Timer'],['stopwatch','Stopwatch']];
+  const big=(id,v)=>`<p id="${id}" class="text-7xl sm:text-8xl font-bold tracking-tight tabular-nums text-center py-10" aria-live="off">${v}</p>`;
+  let body='';
+  if(sub==='pomodoro'){const P=t.pomo,c=P.cfg,plan=buildPlan(c),mode=curMode(P),fn=plan.slice(0,P.idx+1).filter(m=>m==='focus').length;
+    const label=P.fin?'All sessions complete':mode==='focus'?`Focus: session ${fn} of ${c.sessions}`:mode==='short'?'Short break':'Long break';
+    const mins=plan.reduce((a,m)=>a+c[m],0),tot=mins>=60?`${Math.floor(mins/60)}h ${mins%60}m`:`${mins}m`;
+    const bc={focus:'bg-accent',short:'bg-neutral-400 dark:bg-neutral-500',long:'bg-neutral-700 dark:bg-neutral-300'},bw={focus:'w-8',short:'w-4',long:'w-6'},names={focus:'Focus',short:'Short break',long:'Long break'};
+    const inp='w-full mt-1 px-3 py-2 text-base bg-transparent border border-neutral-400 dark:border-neutral-600 disabled:opacity-40';
+    body=`<div class="border border-neutral-300 dark:border-neutral-800 px-5 pt-6 pb-5"><p class="text-center font-semibold">${label}</p>
+    ${big('tm-pomo',fmt(remain(P)))}
+    <div class="h-2 bg-neutral-300 dark:bg-neutral-800"><div id="pomo-bar" class="h-full bg-accent" style="width:0"></div></div>
+    <div class="flex flex-wrap gap-2 justify-center mt-6">${P.fin?`<button class="${btnP}" onclick="pomoRestart()">Start again</button>`:`<button class="${btnP}" onclick="startStop(TM().pomo,()=>stepSecs(TM().pomo))">${P.run?'Pause':'Start'}</button><button class="${btn}" onclick="pomoReset()">Reset</button><button class="${btn}" onclick="pomoNext(false)">Skip</button><button class="${btn}" onclick="pomoStop()">Stop</button>`}</div>
+    <p class="text-center text-sm mt-6">${P.done} focus session${P.done===1?'':'s'} completed today</p>
+    <p class="text-center text-sm mt-6">${P.fin?'Nice work. Every session is done.':plan[P.idx+1]?`Up next: ${names[plan[P.idx+1]]}, ${c[plan[P.idx+1]]} min`:'This is the last step.'}</p>
+    <ol class="mt-4 flex flex-wrap gap-2 justify-center" aria-label="Your plan, in order">${(()=>{let fc=0;return plan.map((m,i)=>{const label=m==='focus'?`Focus ${++fc}`:names[m],isDone=P.fin||i<P.idx,cur=!P.fin&&i===P.idx;
+      return `<li class="flex items-center gap-2 px-3 py-2 text-sm border ${cur?'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100 font-semibold':'border-neutral-300 dark:border-neutral-700'} ${isDone?'opacity-50':''}">${isDone?'<i data-lucide="check" class="w-4 h-4"></i>':''}<span class="${isDone?'line-through':''}">${label}</span><span class="opacity-60">${c[m]} min</span></li>`}).join('')})()}</ol>
+    <p class="text-center text-xs opacity-60 mt-4">${c.sessions} focus session${c.sessions===1?'':'s'}, ${plan.includes('long')?`long break after every ${c.longEvery} session${c.longEvery===1?'':'s'}`:'short breaks only'}. Total ${tot}.</p>
+    </div>
+    <h3 class="font-semibold mt-8 mb-3">Settings</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">${[['focus','Focus (min)'],['short','Short break (min)'],['long','Long break (min)'],['sessions','Focus sessions'],['longEvery','Long break every (0 = none)']].map(([k,l])=>`<label class="text-sm font-medium">${l}<input type="number" min="${k==='longEvery'?0:1}" value="${c[k]}" ${P.run?'disabled':''} onchange="pomoCfg('${k}',this.value)" class="${inp}"></label>`).join('')}
+    <label class="text-sm font-medium flex items-end gap-2 pb-2.5"><input type="checkbox" ${c.auto?'checked':''} onchange="pomoAuto(this.checked)" class="w-4 h-4 accent-[#2f3bff]">Auto-start next step</label></div>
+    ${P.run?'<p class="text-xs opacity-60 mt-3">Pause to change these settings.</p>':''}`}
+  if(sub==='timer'){const T_=t.timer;
+    body=`${big('tm-timer',fmt(remain(T_)))}
+    <div class="flex flex-wrap gap-2 justify-center"><button class="${btnP}" onclick="startStop(TM().timer,()=>TM().timer.dur)">${T_.run?'Pause':'Start'}</button><button class="${btn}" onclick="timerStop()">Stop</button><button class="${btn}" onclick="resetTimer()">Reset</button></div>
+    <div class="flex flex-wrap gap-2 justify-center mt-8">${[5,10,15,30,45,60].map(m=>`<button onclick="setTimerDur(${m})" class="px-3 py-1.5 text-sm font-medium border ${T_.dur===m*60?'border-accent text-accent dark:text-blue-400':'border-neutral-400 dark:border-neutral-600'}">${m} min</button>`).join('')}</div>
+    <label class="block text-xs font-medium mt-5 max-w-[10rem] mx-auto">Custom (minutes)<input type="number" min="1" max="999" value="${Math.round(T_.dur/60)}" onchange="setTimerDur(this.value)" class="w-full mt-1 px-3 py-2 text-base bg-transparent border border-neutral-400 dark:border-neutral-600"></label>`}
+  if(sub==='stopwatch'){const w=t.sw;
+    body=`${big('tm-sw',fmtMs(w.run?Date.now()-w.start:w.el))}
+    <div class="flex flex-wrap gap-2 justify-center"><button class="${btnP}" onclick="swToggle()">${w.run?'Pause':w.el?'Resume':'Start'}</button><button class="${btn} ${w.run?'':'opacity-40'}" onclick="swLap()">Lap</button><button class="${btn}" onclick="swStop()">Stop</button><button class="${btn}" onclick="swReset()">Reset</button></div>
+    ${w.laps.length?`<ol class="mt-8 divide-y divide-neutral-300 dark:divide-neutral-800 border-y border-neutral-300 dark:border-neutral-800 tabular-nums">${w.laps.map((l,i)=>`<li class="flex justify-between py-2 text-sm"><span>Lap ${i+1}</span><span class="opacity-60">+${fmtMs(l-(w.laps[i-1]||0))}</span><span class="font-semibold">${fmtMs(l)}</span></li>`).reverse().join('')}</ol>`:''}`}
+  return `<h1 class="text-3xl font-bold tracking-tight">Study</h1>
+  <div class="flex border-b border-neutral-300 dark:border-neutral-800 mt-4">${subs.map(([id,l])=>`<button onclick="sub='${id}';render()" class="px-4 py-2 text-sm font-semibold -mb-px border-b-2 ${sub===id?'border-accent':'border-transparent opacity-60'}">${l}</button>`).join('')}</div>
+  <div class="mt-6">${sub==='pomodoro'?body:`<div class="border border-neutral-300 dark:border-neutral-800 px-5 pb-6 pt-1">${body}</div>`}</div>`}
+
+/* ---------- shell ---------- */
+function render(){
+  const tabs=[['today','check-square',relLabel(viewK)],['study','book-open','Study'],['stats','bar-chart-3','Analytics'],['settings','settings','Settings']];
+  $('#app').innerHTML=`<header class="flex items-center justify-between py-5">
+    <span class="font-bold text-lg tracking-tight flex items-center gap-2"><span class="w-6 h-6 bg-[#15803d] text-white flex items-center justify-center">${logo('w-4 h-4')}</span>Be Discipline</span>
+    <button onclick="S.prefs.theme=S.prefs.theme==='dark'?'light':'dark';save();applyTheme();render()" aria-label="Toggle light and dark mode" class="p-2"><i data-lucide="${S.prefs.theme==='dark'?'sun':'moon'}" class="w-5 h-5"></i></button></header>
+  <nav class="flex overflow-x-auto border-b border-neutral-300 dark:border-neutral-800 mb-8">${tabs.map(([id,ic,l])=>`<button onclick="view='${id}';render()" class="flex items-center gap-2 px-4 py-3 text-sm font-semibold -mb-px border-b-2 ${view===id?'border-accent':'border-transparent opacity-60'}"><i data-lucide="${ic}" class="w-4 h-4"></i>${l}</button>`).join('')}</nav>
+  <main>${view==='today'?todayView():view==='study'?studyView():view==='stats'?statsView():settingsView()}</main>`;
+  lucide.createIcons()}
+
+(()=>{const tip=document.getElementById('tip');
+  const show=e=>{const c=e.target.closest&&e.target.closest('[data-tip]');if(!c)return;tip.innerHTML=c.dataset.tip;tip.style.display='block';
+    const r=c.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+    tip.style.left=Math.max(6,Math.min(innerWidth-w-6,r.left+r.width/2-w/2))+'px';tip.style.top=(r.top>h+12?r.top-h-8:r.bottom+8)+'px'};
+  const hide=()=>tip.style.display='none';
+  document.addEventListener('mouseover',show);document.addEventListener('focusin',show);document.addEventListener('click',show);
+  document.addEventListener('mouseout',e=>{if(e.target.closest&&e.target.closest('[data-tip]'))hide()});
+  document.addEventListener('focusout',hide);document.addEventListener('scroll',hide,true)})();
+S=normalize(load());save();applyTheme();render();setInterval(tick,250);
+// Midnight rollover: re-render when the local date changes.
+setInterval(()=>{const k=key(new Date());if(k!==todayK){if(viewK===todayK)viewK=k;if(anaK===todayK)anaK=k;todayK=k;render()}},30000);
+document.addEventListener('visibilitychange',()=>{const k=key(new Date());if(k!==todayK){if(viewK===todayK)viewK=k;if(anaK===todayK)anaK=k;todayK=k;render()}});
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
