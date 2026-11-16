@@ -245,7 +245,7 @@
     /* ── tooltip ── */
     #tip {
       position: fixed;
-      z-index: 60;
+      z-index: 80;
       pointer-events: none;
       padding: 6px 10px;
       font-size: 12px;
@@ -527,13 +527,13 @@
 
 <body class="bg-stone-50 text-neutral-950 dark:bg-neutral-950 dark:text-stone-100 min-h-screen">
   <div id="app" class="max-w-2xl mx-auto px-4 pb-32 md:pb-20"></div>
-  <div id="modal"></div>
-  <div id="modal2"></div>
-  <div id="tip" role="tooltip"></div>
-  <div id="toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 md:bottom-6 pointer-events-none"></div>
   <nav id="mobile-nav" aria-label="Main navigation"
     class="fixed bottom-0 inset-x-0 z-40 bg-stone-50/95 dark:bg-neutral-950/95 border-t border-neutral-200 dark:border-neutral-800 backdrop-blur-md"
     style="padding-bottom:env(safe-area-inset-bottom)"></nav>
+  <div id="modal"></div>
+  <div id="modal2"></div>
+  <div id="tip" role="tooltip"></div>
+  <div id="toast" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-[70] md:bottom-6 pointer-events-none"></div>
   <script>
     const APP_VERSION = '0.0.1', KEY = 'be-discipline-v1', DEFCATS = [['Health', '#16a34a'], ['Study', '#2f3bff'], ['Work', '#f59e0b'], ['Mindset', '#a855f7']], PALETTE = ['#16a34a', '#2f3bff', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#64748b'], DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     const $ = s => document.querySelector(s);
@@ -595,19 +595,25 @@
     function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000) }
 
     /* ---------- modal ---------- */
-    const btn = 'px-4 py-2.5 text-sm font-semibold rounded-xl border border-neutral-950 dark:border-stone-100 hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
-    const btnP = 'px-4 py-2.5 text-sm font-semibold rounded-xl bg-accent text-white hover:opacity-90 transition-opacity';
-    function modal(html) { $('#modal').innerHTML = `<div class="fixed inset-0 z-40 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this)closeModal()"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-md p-6 max-h-[90vh] overflow-auto">${html}</div></div>`; lucide.createIcons() }
+    const btn = 'px-4 py-2 text-sm font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors';
+    const btnP = 'px-4 py-2 text-sm font-semibold rounded-xl bg-accent text-white hover:opacity-90 transition-opacity';
+    function modal(html, raw = false) {
+      $('#modal').innerHTML = `<div class="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onclick="if(event.target===this)closeModal()"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl ${raw ? 'max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden' : 'p-6 max-h-[90vh] overflow-auto'}">${html}</div></div>`;
+      lucide.createIcons();
+    }
     function closeModal() { $('#modal').innerHTML = '' }
     /* ---------- in-app popups: confirm + calendar ---------- */
     let popCb = null, cal = null, popSticky = false;
-    function pop(html, sticky = false) { popSticky = sticky; $('#modal2').innerHTML = `<div class="fixed inset-0 z-[45] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="${sticky ? '' : 'if(event.target===this)closePop()'}"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-sm p-6 max-h-[90vh] overflow-auto">${html}</div></div>`; lucide.createIcons() }
-    function closePop() { $('#modal2').innerHTML = ''; popCb = null; cal = null; popSticky = false }
+    function pop(html, sticky = false) {
+      popSticky = sticky;
+      $('#modal2').innerHTML = `<div class="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onclick="${sticky ? '' : 'if(event.target===this)closePop()'}"><div role="dialog" aria-modal="true" class="bg-stone-50 dark:bg-neutral-900 w-full sm:max-w-sm p-5 sm:p-6 rounded-t-2xl sm:rounded-2xl max-h-[90dvh] overflow-auto shadow-2xl" style="padding-bottom:max(1.25rem,env(safe-area-inset-bottom))">${html}</div></div>`;
+      lucide.createIcons();
+    }
     function confirmBox(title, body, action, label = 'Delete') {
       popCb = action;
-      pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-red-600 text-white flex items-center justify-center shrink-0"><i data-lucide="trash-2" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">${esc(title)}</h2></div>
+      pop(`<div class="flex items-center gap-3 mb-3"><span class="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shrink-0"><i data-lucide="trash-2" class="w-5 h-5"></i></span><h2 class="text-xl font-bold">${esc(title)}</h2></div>
   <p class="text-sm mb-6">${esc(body)}</p>
-  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closePop()">Cancel</button><button class="px-4 py-2.5 text-sm font-semibold bg-red-600 text-white hover:bg-red-700" onclick="runPop()">${esc(label)}</button></div>`)
+  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closePop()">Cancel</button><button class="px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 text-white hover:bg-red-700" onclick="runPop()">${esc(label)}</button></div>`)
     }
     function runPop() { const f = popCb; closePop(); if (f) f() }
     function openCal(initK, cb) { const d = fromKey(initK); cal = { y: d.getFullYear(), m: d.getMonth(), sel: initK, cb }; drawCal() }
@@ -616,11 +622,11 @@
     function drawCal() {
       const start = new Date(cal.y, cal.m, 1).getDay(), n = new Date(cal.y, cal.m + 1, 0).getDate();
       const title = new Date(cal.y, cal.m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-      const nb = 'w-9 h-9 border border-neutral-400 dark:border-neutral-600 flex items-center justify-center hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
+      const nb = 'w-9 h-9 border border-neutral-300 dark:border-neutral-700 rounded-lg flex items-center justify-center hover:bg-neutral-950 hover:text-white dark:hover:bg-stone-100 dark:hover:text-neutral-950 transition-colors';
       let cells = ''; for (let i = 0; i < start; i++)cells += '<span></span>';
       for (let d = 1; d <= n; d++) {
         const k = `${cal.y}-${pad(cal.m + 1)}-${pad(d)}`, sel = k === cal.sel, td = k === todayK, tk = S.tasks.some(t => t.date === k) || S.sessions.some(x => x.date === k);
-        cells += `<button onclick="calPick('${k}')" aria-label="${shortDate(k)}" ${sel ? 'aria-current="date"' : ''} class="relative aspect-square text-sm font-medium ${sel ? 'bg-accent text-white' : 'hover:bg-neutral-200 dark:hover:bg-neutral-800'} ${td && !sel ? 'ring-1 ring-inset ring-accent' : ''}">${d}${tk ? '<span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-current opacity-70"></span>' : ''}</button>`
+        cells += `<button onclick="calPick('${k}')" aria-label="${shortDate(k)}" ${sel ? 'aria-current="date"' : ''} class="relative aspect-square text-sm font-medium rounded-lg ${sel ? 'bg-accent text-white' : 'hover:bg-neutral-200 dark:hover:bg-neutral-800'} ${td && !sel ? 'ring-1 ring-inset ring-accent' : ''}">${d}${tk ? '<span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-current opacity-70"></span>' : ''}</button>`
       }
       pop(`<div class="flex items-center justify-between gap-1 mb-4">
     <div class="flex gap-1"><button onclick="calMove(0,-1)" aria-label="Previous year" class="${nb}"><i data-lucide="chevrons-left" class="w-4 h-4"></i></button><button onclick="calMove(-1)" aria-label="Previous month" class="${nb}"><i data-lucide="chevron-left" class="w-4 h-4"></i></button></div>
@@ -634,31 +640,65 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('#modal2').innerHTML) { if (!popSticky) closePop() } else closeModal() } });
 
     function habitForm(type = 'habit') {
-      const inp = 'w-full mb-4 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600';
-      modal(`<h2 id="ft" class="text-xl font-bold mb-4">New habit</h2>
-  <div class="flex mb-3" role="group" aria-label="What are you adding?">${[['habit', 'Habit'], ['task', 'Task']].map(([t, l]) => `<button type="button" data-t="${t}" onclick="setType('${t}')" class="flex-1 px-4 py-2 text-sm font-semibold border -ml-px first:ml-0">${l}</button>`).join('')}</div>
-  <p id="fhelp" class="text-xs opacity-60 mb-5"></p>
-  <label class="block text-sm font-medium mb-1" for="hn">Name</label>
-  <input id="hn" maxlength="60" class="${inp}">
-  <label class="block text-sm font-medium mb-1" for="hc">Category</label>
-  <select id="hc" class="w-full mb-4 px-3 py-2.5 bg-stone-50 dark:bg-neutral-900 border border-neutral-400 dark:border-neutral-600">${catOptions()}</select>
-  <label id="datel" class="block text-sm font-medium mb-1" for="hdt">Starts on</label>
-  <button type="button" id="hdt" data-k="${viewK}" onclick="openCal(this.dataset.k,setFormDate)" class="${inp} flex items-center justify-between text-left"><span id="hdtl">${shortDate(viewK)}</span><i data-lucide="calendar" class="w-4 h-4 opacity-60"></i></button>
-  <div id="rep"><p class="text-sm font-medium mb-1">Repeat</p>
-  <div class="flex gap-1.5 mb-1" id="hd">${DAYS.map((d, i) => `<button type="button" data-d="${i}" aria-pressed="false" class="w-10 h-10 text-sm font-semibold border border-neutral-400 dark:border-neutral-600 aria-pressed:bg-accent aria-pressed:text-white aria-pressed:border-accent" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true')">${d}</button>`).join('')}</div>
-  <p class="text-xs opacity-60 mb-4">Leave all unselected for every day.</p></div>
-  <label class="block text-sm font-medium mb-1" for="hno">Notes (optional)</label>
-  <textarea id="hno" rows="2" class="w-full mb-5 px-3 py-2.5 bg-transparent border border-neutral-400 dark:border-neutral-600"></textarea>
-  <div class="flex gap-2 justify-end"><button class="${btn}" onclick="closeModal()">Cancel</button><button id="fb" class="${btnP}" onclick="addItem()">Add habit</button></div>`);
-      setType(type); $('#hn').focus()
+      const inp = 'w-full mb-3.5 px-3.5 py-2.5 bg-stone-100/70 dark:bg-neutral-800/70 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:border-accent dark:focus:border-accent outline-none transition-colors text-sm';
+      modal(`
+  <div class="flex items-center justify-between px-5 pt-4 pb-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+    <h2 id="ft" class="text-lg sm:text-xl font-bold tracking-tight">New habit</h2>
+    <button type="button" onclick="closeModal()" aria-label="Close dialog" class="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-950 dark:hover:text-stone-100 hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+
+  <div class="overflow-y-auto px-5 py-4 flex-1 overscroll-contain">
+    <div class="flex p-1 mb-2.5 rounded-xl bg-neutral-200/70 dark:bg-neutral-800 border border-neutral-300/40 dark:border-neutral-700/50" role="group" aria-label="What are you adding?">
+      ${[['habit', 'Habit'], ['task', 'Task']].map(([t, l]) => `<button type="button" data-t="${t}" onclick="setType('${t}')" class="flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all">${l}</button>`).join('')}
+    </div>
+    <p id="fhelp" class="text-xs opacity-60 mb-3.5"></p>
+
+    <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hn">Name</label>
+    <input id="hn" maxlength="60" class="${inp}" onkeydown="if(event.key==='Enter'){event.preventDefault();addItem()}">
+
+    <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hc">Category</label>
+    <select id="hc" class="${inp} bg-stone-100/70 dark:bg-neutral-800/70">${catOptions()}</select>
+
+    <label id="datel" class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hdt">Starts on</label>
+    <button type="button" id="hdt" data-k="${viewK}" onclick="openCal(this.dataset.k,setFormDate)" class="${inp} flex items-center justify-between text-left">
+      <span id="hdtl">${shortDate(viewK)}</span>
+      <i data-lucide="calendar" class="w-4 h-4 opacity-60"></i>
+    </button>
+
+    <div id="rep">
+      <p class="text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5">Repeat</p>
+      <div class="grid grid-cols-7 gap-1.5 mb-1.5" id="hd">
+        ${DAYS.map((d, i) => `<button type="button" data-d="${i}" aria-pressed="false" class="aspect-square text-sm font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 aria-pressed:!bg-accent aria-pressed:!text-white aria-pressed:!border-accent flex items-center justify-center transition-colors" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true')">${d}</button>`).join('')}
+      </div>
+      <p class="text-[11px] opacity-60 mb-3.5">Leave all unselected for every day.</p>
+    </div>
+
+    <label class="block text-xs font-semibold uppercase tracking-wider opacity-60 mb-1.5" for="hno">Notes (optional)</label>
+    <textarea id="hno" rows="2" class="${inp} resize-none"></textarea>
+  </div>
+
+  <div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 dark:border-neutral-800 bg-stone-50/95 dark:bg-neutral-900/95 shrink-0" style="padding-bottom:max(0.75rem,env(safe-area-inset-bottom))">
+    <button type="button" class="${btn}" onclick="closeModal()">Cancel</button>
+    <button type="button" id="fb" class="${btnP}" onclick="addItem()">Add habit</button>
+  </div>`, true);
+      setType(type);
+      if (window.innerWidth >= 640) $('#hn').focus();
     }
     function setType(t) {
       formType = t; const task = t === 'task';
-      document.querySelectorAll('[data-t]').forEach(b => { const on = b.dataset.t === t; b.className = 'flex-1 px-4 py-2 text-sm font-semibold border -ml-px first:ml-0 ' + (on ? 'bg-neutral-950 text-white border-neutral-950 dark:bg-stone-100 dark:text-neutral-950 dark:border-stone-100' : 'border-neutral-400 dark:border-neutral-600'); b.setAttribute('aria-pressed', on) });
-      $('#ft').textContent = task ? 'New task' : 'New habit'; $('#fb').textContent = task ? 'Add task' : 'Add habit';
-      $('#datel').textContent = task ? 'Date' : 'Starts on'; $('#rep').style.display = task ? 'none' : '';
+      document.querySelectorAll('[data-t]').forEach(b => {
+        const on = b.dataset.t === t;
+        b.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg transition-all ' + (on ? 'bg-white dark:bg-neutral-950 text-neutral-950 dark:text-stone-100 shadow-sm' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-stone-200');
+        b.setAttribute('aria-pressed', on);
+      });
+      $('#ft').textContent = task ? 'New task' : 'New habit';
+      $('#fb').textContent = task ? 'Add task' : 'Add habit';
+      $('#datel').textContent = task ? 'Date' : 'Starts on';
+      $('#rep').style.display = task ? 'none' : '';
       $('#fhelp').textContent = task ? 'A task happens once, on the date you pick.' : 'A habit repeats and builds a streak from its start date.';
-      $('#hn').placeholder = task ? 'e.g. Submit the assignment' : 'e.g. Write for 30 minutes'
+      $('#hn').placeholder = task ? 'e.g. Submit the assignment' : 'e.g. Write for 30 minutes';
     }
     function addItem() {
       const name = $('#hn').value.trim(); if (!name) { $('#hn').focus(); return toast('Enter a name.', 'err') }
@@ -721,11 +761,11 @@
         const d = done(h, vd), st = streak(h, viewK); return `<li class="habit-row border-neutral-200 dark:border-neutral-800/80">${box(d, `toggle('${h.id}')`, h.name)}
     <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate ${d ? 'line-through opacity-40' : ''}">${esc(h.name)}</p>${meta(h, h.days.length ? ' · ' + h.days.map(i => DN[i]).join(', ') : '')}</div>
     ${streakBadge(st)}${delBtn(`delHabit('${h.id}')`, 'Delete habit')}</li>`
-      }).join('')}</ul>` : empty(habits.length ? 'No habits in this category.' : 'No habits scheduled for this day.')}
+      }).join('')}</ul>` : empty(habits.length ? 'No habits in this category.' : 'No habits scheduled for this day. <button type="button" onclick="habitForm(\'habit\')" class="font-semibold text-accent dark:text-blue-400 underline underline-offset-2">Add a habit</button>')}
   ${head('Tasks', td, tasks.length)}
   ${ft.length ? `<ul class="${listWrap}">${ft.map(t => `<li class="habit-row border-neutral-200 dark:border-neutral-800/80">${box(t.done, `toggleTask('${t.id}')`, t.name)}
     <div class="min-w-0 flex-1"><p class="font-semibold text-sm truncate ${t.done ? 'line-through opacity-40' : ''}">${esc(t.name)}</p>${meta(t)}</div>
-    ${delBtn(`delTask('${t.id}')`, 'Delete task')}</li>`).join('')}</ul>` : empty(tasks.length ? 'No tasks in this category.' : 'No tasks for this day. Tap Add to create one.')}
+    ${delBtn(`delTask('${t.id}')`, 'Delete task')}</li>`).join('')}</ul>` : empty(tasks.length ? 'No tasks in this category.' : 'No tasks for this day. <button type="button" onclick="habitForm(\'task\')" class="font-semibold text-accent dark:text-blue-400 underline underline-offset-2">Add a task</button>')}
   ${S.habits.length + S.tasks.length ? '' : '<p class="text-sm opacity-50 text-center mt-10">Add a habit to build a streak, or a task for a single day.</p>'}
   <button onclick="habitForm()" class="${btnP} fab fixed bottom-6 right-6 shadow-xl flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold" style="margin-bottom:env(safe-area-inset-bottom)"><i data-lucide="plus" class="w-4 h-4"></i>Add</button>`
     }
